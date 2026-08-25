@@ -33,7 +33,7 @@ def ensure_model_exists(model_name: str) -> None:
         print("Please make sure the Ollama application or service is running.", file=sys.stderr)
         sys.exit(1)
 
-def main() -> None:
+def main() :
     # Set up command line argument parsing
     parser = argparse.ArgumentParser(
         description="Query the local qwen2.5:3b model using LangChain and Ollama."
@@ -56,8 +56,9 @@ def main() -> None:
     
     # Using streaming to write to stdout directly as it responds
     for chunk in llm.stream([HumanMessage(content=args.prompt)]):
-        sys.stdout.write(chunk.content)
-        sys.stdout.flush()
+        print(chunk.content, end="", flush=True)  # Print each chunk without newline and flush immediately
+        # sys.stdout.write(chunk.content)
+        # sys.stdout.flush()
     
     print()  # Add a trailing newline
 

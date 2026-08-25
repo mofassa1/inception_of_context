@@ -62,7 +62,7 @@ if __name__ == "__main__":
     chunker = Chunker()
     embedder = Embedder()
 
-    store = VectorStore("chroma_db", collection_name="codebase")
+    store = VectorStore("../chroma_db", collection_name="codebase")
 
     for filepath in walk_target(target_path, chroma_path):
 
@@ -86,13 +86,19 @@ if __name__ == "__main__":
                     "content_hash": chunk.content_hash
                 }]
             )
+            print("*" * 20)
+            print(f"Indexed chunk: {chunk.id}")
+            print("chunk stored in db with metadata:")
+            print(store.get_chunks_by_ids([chunk.id]))
 
-    for filepath in walk_target(target_path, chroma_path):
-        stored_chunks: dict = store.get_file_chunks(filepath)
 
-        for chunk_id, metadata in zip((stored_chunks.get("ids", [])), stored_chunks.get('metadatas', [])):
+    # for filepath in walk_target(target_path, chroma_path):
+    #     stored_chunks: dict = store.get_file_chunks(filepath)
 
-            embedding = store.collection.get(ids=[chunk_id], include=["embeddings"])["embeddings"][0]
+    #     for chunk_id, metadata in zip((stored_chunks.get("ids", [])), stored_chunks.get('metadatas', [])):
+
+            # embedding = store.collection.get(ids=[chunk_id], include=["embeddings"])["embeddings"][0]
+    print(f"Total chunks indexed: {store.get_all_chunks_count()}")
 
     watch = OnMyWatch(watchDirectory=target_path)
     watch.run(store=store, chunker=chunker, embedder=embedder)

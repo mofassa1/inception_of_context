@@ -1,14 +1,20 @@
 
 import chromadb
 import os
-
+import sys
+import pathlib
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # avoid warning spam from HuggingFace tokenizers
 os.environ["HF_HUB_OFFLINE"] = "1"  # lock offline mode for the rest of the process's lifetime
 
 class VectorStore:
     def __init__(self, chroma_path: str, collection_name: str):
+        absolute_path = pathlib.Path(chroma_path).resolve()
+
+        print(f"Chroma path: {absolute_path}")
+        print(f"Collection: {collection_name}")
+
         self.client = chromadb.PersistentClient(
-            path=chroma_path
+            path=absolute_path
         )
 
         self.collection = self.client.get_or_create_collection(
@@ -30,7 +36,18 @@ class VectorStore:
             metadatas=metadatas,
         )
 
+    def get_chunks_by_ids(self, ids: list[str]) -> dict[str, list]:
+        results = self.collection.get(
+            ids=ids,
+            include=["metadatas", "documents"],
+        )
 
+        return results
+
+    def get_all_chunks_count(self) -> int:
+        results = self.collection.count()
+
+        return results
 
     def get_file_chunks(self, file_path: str) -> dict[str, list]:
        
@@ -40,3 +57,33 @@ class VectorStore:
         )
 
         return results
+    
+    def get_files_with_chunks_count(self) -> dict[str, int]:
+        results = self.collection.get(
+            include=["metadatas"],
+        )
+
+        file_chunk_counts = {}
+        for metadata in results["metadatas"]:
+            file_path = metadata.get("file")
+            if file_path:
+                file_chunk_counts[file_path] = file_chunk_counts.get(file_path, 0) + 1
+
+        return file_chunk_counts
+    
+    def get_chunks_by_file(self, file_path: str) -> dict[str, list]:
+        results = self.collection.get(
+            where={"file": file_path},
+            include=["metadatas", "documents"],
+        )
+
+        return results
+
+    def cosine_similarity_search(self, query_embedding: list[float], n_results: int = 5)-> list[str]:
+        results = self.collection.query(
+            query_embeddings=query_embedding,
+            n_results=n_results,
+            include=["documents"],
+        )
+
+        return results["documents"][0] if results["documents"] else []

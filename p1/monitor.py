@@ -1,6 +1,7 @@
 import time
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+from utils import is_binary
 import sys
 
 class OnMyWatch:
@@ -121,6 +122,9 @@ class Handler(FileSystemEventHandler):
                 print(f"Updated metadata for chunk: {new_chunk.id} for file: {new_chunk.file}")
 
     def _handle_file_modified(self, event):
+        if is_binary(event.src_path):
+            print(f"Skipping binary file: {event.src_path}")
+            return
         with open(event.src_path, 'r') as f:
             source = f.read()
         
@@ -273,6 +277,9 @@ class Handler(FileSystemEventHandler):
         #         )
 
     def _handle_file_created(self, event):
+        if is_binary(event.src_path):
+            print(f"Skipping binary file: {event.src_path}")
+            return
         with open(event.src_path, 'r') as f:
             source = f.read()
         
