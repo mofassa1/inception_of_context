@@ -11,6 +11,15 @@ class OllamaModelManager:
     def __init__(self, model_name: str):
         self.model_name = model_name
         self._llm: ChatOllama | None = None  
+        self.code_model_name = "testing name" 
+    
+    def get_code_model_name(self) -> str:
+        """Return the name of the code model."""
+        return self.code_model_name
+    
+    def get_model_name(self) -> str:
+        """Return the name of the main model."""
+        return self.model_name
 
     def ensure_model_exists(self) -> None:
         """Check if the Ollama model exists locally; if not, pull it."""

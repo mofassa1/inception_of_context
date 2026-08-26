@@ -9,6 +9,7 @@ os.environ["HF_HUB_OFFLINE"] = "1"  # lock offline mode for the rest of the proc
 class VectorStore:
     def __init__(self, chroma_path: str, collection_name: str):
         absolute_path = pathlib.Path(chroma_path).resolve()
+        self.chroma_path = str(absolute_path)
 
         print(f"Chroma path: {absolute_path}")
         print(f"Collection: {collection_name}")
@@ -71,6 +72,19 @@ class VectorStore:
 
         return file_chunk_counts
     
+    def get_all_files(self) -> list[str]:
+        results = self.collection.get(
+            include=["metadatas"],
+        )
+
+        files = set()
+        for metadata in results["metadatas"]:
+            file_path = metadata.get("file")
+            if file_path:
+                files.add(file_path)
+
+        return list(files)
+    
     def get_chunks_by_file(self, file_path: str) -> dict[str, list]:
         results = self.collection.get(
             where={"file": file_path},
@@ -87,3 +101,7 @@ class VectorStore:
         )
 
         return results["documents"][0] if results["documents"] else []
+    
+    def get_chroma_path(self) -> str:
+        """Return the path to the Chroma database."""
+        return self.chroma_path
