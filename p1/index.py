@@ -69,7 +69,8 @@ if __name__ == "__main__":
         with open(filepath, "r", encoding="utf-8") as f:
             source = f.read()
         chunks = chunker.chunk_python_file(filepath, source)
-        vectors_list = [v for v in  embedder.create_embeddings([chunk.content for chunk in chunks])]
+        vectors_list = [v for v in  embedder.create_embeddings([
+            f"file path and name: {chunk.file}, kind: {chunk.kind}, qualified name: {chunk.qualified_name}, content: {chunk.content}" for chunk in chunks])]
 
         for chunk, vector in zip(chunks, vectors_list):
 

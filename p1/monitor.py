@@ -140,11 +140,6 @@ class Handler(FileSystemEventHandler):
         new_ids = current_ids - last_stored_ids
         removed_ids = last_stored_ids - current_ids
         unchanged_ids = current_ids & last_stored_ids
-        # print("*" * 20)
-        # print(f"New chunk IDs: {new_ids}")
-        # print(f"Removed chunk IDs: {removed_ids}")
-        # print(f"Unchanged chunk IDs: {unchanged_ids}")
-        # print("*" * 20)
 
 
         if new_ids:
@@ -154,127 +149,6 @@ class Handler(FileSystemEventHandler):
             self._handle_chunk_deleted(event, removed_ids)
         if unchanged_ids:
             self._handle_chunk_modified(unchanged_ids, [chunk for chunk in chunks if chunk.id in unchanged_ids], file_chunks)
-            # print(f"Unchanged chunk IDs: {unchanged_ids}")
-
-            # unchanged_new_chunks = [chunk for chunk in chunks if chunk.id in unchanged_ids]
-            # unchanged_stored_chunks = [chunk for chunk in file_chunks if chunk["id"] in unchanged_ids]
-            # self._handle_chunk_modified(unchanged_ids, unchanged_new_chunks, unchanged_stored_chunks)  # Re-embed unchanged chunks to update their embeddings if needed
-        # print(f"current_ids : {current_ids}")
-        # print(f"metadatas_stored_chunks : {file_chunks['metadatas']}")
-        # print(f"ids_stored_chunks : {file_chunks['ids']}")
-
-
-
-
-
-        # embeddings = [self.embedder.embed(chunk.content) for chunk in chunks]
-        
-        # stored_chunks: dict = self.store.get_file_chunks(event.src_path) 
-
-        # current_ids = {chunk.id for chunk in chunks}
-        # stored_ids = set(stored_chunks["ids"])
-        # stored_ids = {chunk['id'] for chunk in stored_chunks}
-        # ids = chunk.get("ids", [])
-        
- 
-    # print(f"Processed {target_path} and stored embeddings in {chroma_path}")
-    # print("+" * 20)
-    # print("the database contains the following chunks:")
-    # for filepath in walk_target(target_path, chroma_path):
-    #     stored_chunks: dict = store.get_file_chunks(filepath)
-    #     print("**" * 20)
-    #     print(f"File: {filepath}")
-    #     print(f"Stored Chunks: {len(stored_chunks.get('ids', []))}")
-    #     # print each chunk's metadata and embidding length
-    #     for chunk_id, metadata in zip(stored_chunks.get('ids', []), stored_chunks.get('metadatas', [])):
-    #         print(f"Chunk ID: {chunk_id}, Metadata: {metadata}")
-    #         # get the embedding length
-    #         embedding = store.collection.get(ids=[chunk_id], include=["embeddings"])["embeddings"][0]
-    #         print(f"Embedding length: {len(embedding)}")
-    #         print("---" * 10)
-
-        # added_ids = current_ids - stored_ids
-        # removed_ids = stored_ids - current_ids
-
-
-
-
-        # unchanged_ids = current_ids & stored_ids
-        # current_unchanged_chunks = [chunk for chunk in chunks if chunk.id in unchanged_ids]
-        # # stored_unchanged_chunks = [chunk for chunk in stored_chunks["ids"] if chunk in unchanged_ids]
-
-        # # bodis_changed_ids = {chunk.id for chunk in current_unchanged_chunks if chunk.content_hash != stored_chunks["content_hashs"][stored_chunks["ids"].index(chunk.id)]}
-
-        # bodis_changed_ids = {
-        #     c.id for c in chunks
-        #     if c.id in unchanged_ids
-        #     and c.content_hash != stored_chunks[c.id].get("content_hash")
-        # }
-        
-        # print(f"bodis_changed_ids : {bodis_changed_ids}")
-
-        # # print(f"type of unchanged_ids :{unchanged_ids} ")
-        # # sys.exit(1)
-        # # bodis_changed_ids = set()
-        # # bodis_changed_ids = {chunk.id for chunk in chunks if chunk.id in unchanged_ids and chunk.content_hash != stored_chunks["content_hashs"][stored_chunks["ids"].index(chunk.id)]}
-        # print(f"bodis_changed_ids: {bodis_changed_ids}")
-        # # this need more work to handle the case where a chunk's content has changed but its id remains the same. For now, we will treat unchanged_ids as truly unchanged.
-        # if added_ids:
-        #     print(f"Added chunks: {added_ids}")
-        #     added_chunks = [chunk for chunk in chunks if chunk.id in added_ids]
-        #     embeddings = self.embedder.create_embeddings([chunk.content for chunk in added_chunks])
-        #     for chunk, embedding in zip(added_chunks, embeddings):
-        #         self.store.add(
-        #             ids=[chunk.id],
-        #             documents=[chunk.content],
-        #             embeddings=[embedding],
-        #             metadatas=[{
-        #                 "file": chunk.file,
-        #                 "kind": chunk.kind,
-        #                 "qualified_name": chunk.qualified_name,
-        #                 "start_line": chunk.start_line,
-        #                 "end_line": chunk.end_line,
-        #                 "content_hash": chunk.content_hash
-        #             }]
-        #         )
-        # if removed_ids:
-        #     print(f"Removed chunks: {removed_ids}")
-        #     for chunk_id in removed_ids:
-        #         self.store.collection.delete(where={"id": chunk_id})
-        # if bodis_changed_ids:
-        #     print(f"Changed chunks: {bodis_changed_ids}")
-        #     changed_chunks = [chunk for chunk in chunks if chunk.id in bodis_changed_ids]
-        #     embeddings = self.embedder.create_embeddings([chunk.content for chunk in changed_chunks])
-        #     for chunk, embedding in zip(changed_chunks, embeddings):
-        #         self.store.collection.update(
-        #             ids=[chunk.id],
-        #             documents=[chunk.content],
-        #             embeddings=[embedding],
-        #             metadatas=[{
-        #                 "file": chunk.file,
-        #                 "kind": chunk.kind,
-        #                 "qualified_name": chunk.qualified_name,
-        #                 "start_line": chunk.start_line,
-        #                 "end_line": chunk.end_line,
-        #                 "content_hash": chunk.content_hash
-        #             }]
-        #         )
-        # if not added_ids and not removed_ids and not bodis_changed_ids:
-        #     print("No changes detected in the file's chunks.")
-        #     # chnges may be in the start_line or end_line of the chunk, so we will update the metadatas for all unchanged_ids
-        #     unchanged_chunks = [chunk for chunk in chunks if chunk.id in unchanged_ids]
-        #     for chunk in unchanged_chunks:
-        #         self.store.collection.update(
-        #             ids=[chunk.id],
-        #             metadatas=[{
-        #                 "file": chunk.file,
-        #                 "kind": chunk.kind,
-        #                 "qualified_name": chunk.qualified_name,
-        #                 "start_line": chunk.start_line,
-        #                 "end_line": chunk.end_line,
-        #                 "content_hash": chunk.content_hash
-        #             }]
-        #         )
 
     def _handle_file_created(self, event):
         if is_binary(event.src_path):
@@ -301,8 +175,14 @@ class Handler(FileSystemEventHandler):
             )
     def _handle_file_deleted(self, event):
         stored_chunks = self.store.get_file_chunks(event.src_path)
-        for chunk in stored_chunks:
-            self.store.collection.delete(where={"id": chunk['id']})
+
+        ids = stored_chunks["ids"]
+
+        if ids:
+            self.store.collection.delete(ids=ids)
+            print("*" * 20)
+            print(f"Deleted chunks: {ids} for file: {event.src_path}")
+            print("*" * 20)
 
 
 

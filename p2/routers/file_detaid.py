@@ -1,5 +1,6 @@
+from pydantic import BaseModel
 from p2.store import vector_store as store
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path
 
 router = APIRouter(tags=["files"])
 
@@ -159,3 +160,64 @@ async def get_all_files():
         return {"files": files}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+# resp = api.patch(f"/chunks/{chunk_id}", json={"content": new_content})
+
+class UpdateChunkRequest(BaseModel):
+    content: str
+    chunk_id: str
+
+from pathlib import Path
+
+
+@router.patch("/chunks_modify")
+async def update_chunk_content(request: UpdateChunkRequest):
+
+    chunk_id = request.chunk_id
+
+    # Get the chunk
+    chunk = store.get_chunks_by_ids([chunk_id])
+
+    old_content = chunk["documents"][0]
+    file_path = chunk["metadatas"][0]["file"]
+
+    print(f"[Update Chunk] Old content for {chunk_id}: {old_content}")
+
+    # Update the chunk in ChromaDB
+    # store.update_chunk_content(
+    #     chunk_id,
+    #     request.content,
+    # )
+
+    # Get all chunks belonging to this file
+    file_chunks = store.get_chunks_by_file(file_path)
+
+    # Keep document + metadata together
+    chunks = list(zip(
+        file_chunks["documents"],
+        file_chunks["metadatas"],
+    ))
+
+    # Sort by starting line
+    chunks.sort(
+        key=lambda chunk: chunk[1].get("start_line", 0)
+    )
+
+    # Reconstruct the file
+    file_content = "\n".join(
+        document
+        for document, metadata in chunks
+    )
+
+    # Write to the actual file
+    Path(file_path).write_text(
+        file_content,
+        encoding="utf-8",
+    )
+
+    print(f"[Update Chunk] Updated content for {chunk_id}: {request.content}")
+    print(f"[Update File] File written: {file_path}")
+
+    return {
+        "message": f"Chunk {chunk_id} and file updated successfully."
+    }

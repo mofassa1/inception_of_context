@@ -7,7 +7,7 @@ app = FastAPI()
 
 # app.include_router(chunks_router)
 app.include_router(file_details_router)
-# app.include_router(rag_router)
+app.include_router(rag_router)
 app.include_router(status_router)
 @app.get("/")
 async def root():

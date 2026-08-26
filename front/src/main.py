@@ -35,6 +35,7 @@ HOW TO WIRE IT TO YOUR FASTAPI SERVER
      POST /ask/stream {query, k, session_id}  -> streamed LLM answer + sources
 """
 
+import asyncio
 import threading
 import httpx
 import flet as ft
@@ -45,8 +46,23 @@ import flet as ft
 BASE_URL = "http://127.0.0.1:8000"
 
 # Reusable HTTP client for all FastAPI calls. timeout=None because streaming
-# LLM answers can take a while.
-api = httpx.Client(base_url=BASE_URL, timeout=None)
+# LLM answers can take a while. follow_redirects=True so a trailing-slash
+# mismatch between the client URL and the FastAPI route (which returns a
+# 307, not a 4xx/5xx) gets followed instead of silently "succeeding" —
+# raise_for_status() doesn't treat a 307 as an error, so without this the
+# PATCH looked like it worked while the backend never actually received it.
+api = httpx.Client(base_url=BASE_URL, timeout=None, follow_redirects=True)
+
+
+def _normalize_text(text: str) -> str:
+    """Collapse \\r\\n / \\r into \\n before comparing edited text.
+
+    Flet's TextField (backed by Flutter) can normalize line endings when
+    rendering multiline content, so comparing raw strings between what was
+    loaded and what the field reports can show a "change" that isn't a real
+    edit. Normalizing both sides before comparing avoids false positives.
+    """
+    return (text or "").replace("\r\n", "\n").replace("\r", "\n")
 
 
 # --------------------------------------------------------------------------
@@ -253,11 +269,21 @@ def build_files_tab(page: ft.Page) -> ft.Container:
     file_meta = ft.Text("", size=12, color=ft.Colors.GREY_500)
 
     selected_file = {"name": ""}
+    active_poll = {"stop_flag": None}
 
     def load_file(file_name: str):
         """Fetch a single file's content + chunk boundaries from the backend."""
         print(f"[Files] File selected: {file_name} -> GET /files/{file_name}")
         selected_file["name"] = file_name
+
+        # Stop the previous file's polling loop before starting a new one —
+        # otherwise every file switch leaves another loop running forever,
+        # each still holding closures over that file's now-stale chunk data.
+        # The loop checks this flag cooperatively rather than being killed
+        # outright, since asyncio tasks started via page.run_task don't
+        # expose a simple cancel handle here.
+        if active_poll["stop_flag"] is not None:
+            active_poll["stop_flag"]["stop"] = True
 
         # >>> FASTAPI HOOK <<<
         try:
@@ -302,31 +328,100 @@ def build_files_tab(page: ft.Page) -> ft.Container:
         file_meta.value = f"{total_lines} lines · {total_bytes} bytes · {len(chunks)} chunks"
 
         code_view.controls.clear()
+        chunk_fields = {}
+        # Tracks the content each field was last synced against — starts as
+        # the original document, then advances to whatever was last sent to
+        # the backend, so we only PATCH a chunk when it changes again, not
+        # on every single poll tick.
+        last_synced = {}
         for index, (chunk_id, document, metadata) in enumerate(chunks, start=1):
             start_line = metadata.get("start_line", 1)
             kind = metadata.get("kind", "")
             qualified_name = metadata.get("qualified_name", "")
-            label = f"chunk #{index} — {kind} {qualified_name} — starts at line {start_line}"
+
+            label = (
+                f"chunk #{index} — {kind} "
+                f"{qualified_name} — starts at line {start_line}"
+            )
 
             code_view.controls.append(
                 ft.Container(
-                    content=ft.Text(label, size=11, color=ft.Colors.BLUE_300),
-                    padding=ft.Padding.only(top=10, bottom=2, left=4),
+                    content=ft.Text(
+                        label,
+                        size=11,
+                        color=ft.Colors.BLUE_300,
+                    ),
+                    padding=ft.Padding.only(
+                        top=10,
+                        bottom=2,
+                        left=4,
+                    ),
                 )
             )
 
-            line_no = start_line
-            for line in document.split("\n"):
-                code_view.controls.append(
-                    ft.Row(
-                        [
-                            ft.Text(str(line_no), size=11, color=ft.Colors.GREY_600, width=30),
-                            ft.Text(line, size=12, font_family="monospace", color=ft.Colors.GREY_200),
-                        ]
-                    )
-                )
-                line_no += 1
+            field = ft.TextField(
+                value=document,
+                multiline=True,
+                min_lines=max(1, len(document.splitlines())),
+                text_style=ft.TextStyle(
+                    font_family="monospace",
+                    size=12,
+                    color=ft.Colors.GREEN_600,
+                ),
+                border=ft.InputBorder.NONE,
+                expand=True,
+                cursor_color=ft.Colors.BLUE_300,
+            )
 
+            chunk_fields[chunk_id] = field
+            last_synced[chunk_id] = _normalize_text(document)
+
+            code_view.controls.append(field)
+
+        def sync_chunk(chunk_id: str, new_content: str):
+            """Push an edited chunk's new content to the backend."""
+            print(f"[Files] Chunk {chunk_id} modified -> PATCH /chunks_modify")
+
+            # >>> FASTAPI HOOK <<<
+            # No trailing slash: the route is @router.patch("/chunks_modify"),
+            # and chunk_id goes in the JSON body (UpdateChunkRequest), not the URL.
+            try:
+                resp = api.patch("/chunks_modify", json={"content": new_content, "chunk_id": chunk_id})
+                resp.raise_for_status()
+            except httpx.HTTPError as ex:
+                print(f"[Files] Failed to sync chunk {chunk_id}: {ex}")
+                # Leave last_synced un-updated so the next poll retries the send.
+                return
+            last_synced[chunk_id] = _normalize_text(new_content)
+
+        def check_changes():
+            """Poll every field for edits and push any that changed since the last sync."""
+            for chunk_id, field in chunk_fields.items():
+                # Compare normalized text, not raw field.value: multiline
+                # TextField controls can normalize line endings (\r\n vs \n)
+                # when rendering, which otherwise makes every single poll
+                # look like a change even when the user hasn't typed
+                # anything — that's what was causing the endpoint to fire
+                # on every tick instead of only on real edits.
+                if _normalize_text(field.value) != last_synced.get(chunk_id):
+                    sync_chunk(chunk_id, field.value)
+
+        # Flet has no built-in Timer/interval control; the supported way to
+        # run periodic background work is an asyncio loop scheduled via
+        # page.run_task. This polls every 500ms rather than reacting to
+        # on_change, so rapid keystrokes coalesce into a single request
+        # instead of firing one per character typed.
+        stop_flag = {"stop": False}
+        active_poll["stop_flag"] = stop_flag
+
+        async def poll_loop():
+            while not stop_flag["stop"]:
+                await asyncio.sleep(0.5)
+                if stop_flag["stop"]:
+                    break
+                check_changes()
+
+        page.run_task(poll_loop)
         page.update()
 
     def build_file_row(name: str, chunk_count: int) -> ft.Container:
@@ -366,16 +461,6 @@ def build_files_tab(page: ft.Page) -> ft.Container:
                 {"name": "notes/storage.py", "chunks": 9},
                 {"name": "tests/test_service.py", "chunks": 6},
             ]
-        # files = [
-        #     {"name": "README.md", "chunks": 1},
-        #     {"name": "ioc.config.yml", "chunks": 1},
-        #     {"name": "main.py", "chunks": 7},
-        #     {"name": "notes/__init__.py", "chunks": 1},
-        #     {"name": "notes/cli.py", "chunks": 3},
-        #     {"name": "notes/service.py", "chunks": 8},
-        #     {"name": "notes/storage.py", "chunks": 9},
-        #     {"name": "tests/test_service.py", "chunks": 6},
-        # ]
 
         file_list_col.controls.clear()
         for f in files:
@@ -409,7 +494,7 @@ def build_files_tab(page: ft.Page) -> ft.Container:
         content=ft.Column(
             [
                 ft.Row([file_title, file_meta], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Divider(color=ft.Colors.GREY_800, height=1),
+                ft.Divider(color=ft.Colors.RED_800, height=1),
                 code_view,
             ],
             spacing=8,
@@ -512,21 +597,18 @@ def build_ask_tab(page: ft.Page) -> ft.Container:
         print(f"[Ask] Retrieve clicked -> POST /retrieve  query={query!r} k={k}")
 
         # >>> FASTAPI HOOK <<<
-        # resp = api.post("/retrieve", json={"query": query, "k": k})
-        # resp.raise_for_status()
-        # sources = resp.json()["sources"]   # [{"file": "...", "line": N, "score": 0.1}, ...]
+        resp = api.post("/retrieve", json={"query": query, "k": k})
+        resp.raise_for_status()
+        sources = resp.json()   # [{"file": "...", "line": N, "score": 0.1}, ...]
+        print("*" * 40)
+        print(f"[Ask] Retrieved {len(sources)} sources from backend")
+        print("*" * 40)
 
-        # Placeholder sources matching the screenshot:
-        sources = [
-            {"file": "notes/service.py", "line": 7, "score": 0.10},
-            {"file": "tests/test_service.py", "line": 28, "score": 0.04},
-            {"file": "tests/test_service.py", "line": 19, "score": -0.00},
-            {"file": "main.py", "line": 1, "score": -0.07},
-            {"file": "notes/service.py", "line": 24, "score": -0.08},
-        ][:k]
+        sorted_sources = sorted(sources, key=lambda s: s["score"], reverse=True)[:k]
+        sources_header.value = f"{len(sorted_sources)} sources retrieved"
 
         answer_box.visible = False
-        render_sources(sources)
+        render_sources(sorted_sources)
         page.update()
 
     def ask_llm_clicked(e):
@@ -535,42 +617,26 @@ def build_ask_tab(page: ft.Page) -> ft.Container:
         k = int(k_field.value or 5)
         print(f"[Ask] Ask LLM clicked -> POST /ask/stream  query={query!r} k={k} session={session_id['value']}")
 
-        answer_box.visible = True
-        answer_text.value = ""
-        page.update()
-
         # >>> FASTAPI HOOK (streaming) <<<
         # Runs in a background thread so it doesn't freeze the UI while streaming.
-        # def worker():
-        #     with api.stream(
-        #         "POST",
-        #         "/ask/stream",
-        #         json={"query": query, "k": k, "session_id": session_id["value"]},
-        #     ) as resp:
-        #         for chunk in resp.iter_text():
-        #             answer_text.value += chunk
-        #             page.update()
-        #     # After streaming finishes, fetch sources / session id, e.g. from a
-        #     # trailing SSE "event: sources" message or a separate response header.
-        # threading.Thread(target=worker, daemon=True).start()
+        def worker():
+            with api.stream(
+                "POST",
+                "/ask/stream",
+                json={"query": query, "k": k, "session_id": session_id["value"]},
+            ) as resp:
+                answer_box.visible = True
+                answer_text.value = ""
+                page.update()
+                for chunk in resp.iter_text():
+                    answer_text.value += chunk
+                    page.update()
+            # After streaming finishes, fetch sources / session id, e.g. from a
+            # trailing SSE "event: sources" message or a separate response header.
+        threading.Thread(target=worker, daemon=True).start()
 
-        # Placeholder (non-streaming) behavior so the UI is testable right now:
-        answer_text.value = (
-            "NoteService.search works by taking a term as input, converting it to "
-            "lowercase, and then searching for that term in the titles or bodies of "
-            "all notes. It returns a list"
-        )
         session_id["value"] = "24f441b8"
         session_label.value = f"session {session_id['value']}"
-        render_sources(
-            [
-                {"file": "notes/service.py", "line": 7, "score": 0.10},
-                {"file": "tests/test_service.py", "line": 28, "score": 0.04},
-                {"file": "tests/test_service.py", "line": 19, "score": -0.00},
-                {"file": "main.py", "line": 1, "score": -0.07},
-                {"file": "notes/service.py", "line": 24, "score": -0.08},
-            ][:k]
-        )
         page.update()
 
     controls_row = ft.Row(

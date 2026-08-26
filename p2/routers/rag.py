@@ -3,7 +3,7 @@ from p2.store import vector_store as store
 from p2.llm_object import llm_manager
 from p2.embidder_object import embedder
 
-router = APIRouter(prefix="/rag", tags=["rag"])
+router = APIRouter(tags=["rag"])
 
 @router.get("/query")
 async def query_rag(user_content: str):
@@ -32,5 +32,90 @@ async def query_rag(user_content: str):
         response_stream = llm_manager.stream_response(messages)
 
         return {"response": response_stream}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+from pydantic import BaseModel
+
+
+class RetrieveRequest(BaseModel):
+    query: str
+    k: int = 5
+
+
+@router.post("/retrieve")
+async def retrieve_sources(request: RetrieveRequest):
+    query = request.query
+    k = request.k
+
+    try:
+        # Ensure the model exists before retrieving sources
+        llm_manager.ensure_model_exists()
+
+        # Get the relevant chunks from the vector store
+        query_embedding = embedder.create_embeddings([query])
+        relevant_chunks = store.cosine_similarity_search_with_scores( query_embedding=query_embedding[0], n_results=k)
+
+        return relevant_chunks
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        # >>> FASTAPI HOOK <<<
+        # resp = api.post("/retrieve", json={"query": query, "k": k})
+        # resp.raise_for_status()
+        # sources = resp.json()["sources"]   # [{"file": "...", "line": N, "score": 0.1}, ...]
+
+        # Placeholder sources matching the screenshot:
+# sources = [
+#     {"file": "notes/service.py", "line": 7, "score": 0.10},
+#     {"file": "tests/test_service.py", "line": 28, "score": 0.04},
+#     {"file": "tests/test_service.py", "line": 19, "score": -0.00},
+#     {"file": "main.py", "line": 1, "score": -0.07},
+#     {"file": "notes/service.py", "line": 24, "score": -0.08},
+# ][:k]
+
+##############################################################################################################
+        # >>> FASTAPI HOOK (streaming) <<<
+# Runs in a background thread so it doesn't freeze the UI while streaming.
+# def worker():
+#     with api.stream(
+#         "POST",
+#         "/ask/stream",
+#         json={"query": query, "k": k, "session_id": session_id["value"]},
+#     ) as resp:
+#         for chunk in resp.iter_text():
+#             answer_text.value += chunk
+#             page.update()
+#     # After streaming finishes, fetch sources / session id, e.g. from a
+#     # trailing SSE "event: sources" message or a separate response header.
+# threading.Thread(target=worker, daemon=True).start()
+
+class AskRequest(BaseModel):
+    query: str
+    k: int = 5
+    session_id: str = ""
+
+from fastapi.responses import StreamingResponse
+
+@router.post("/ask/stream")
+async def ask_stream(request: AskRequest):
+    user_content = request.query
+    k = request.k
+    session_id = request.session_id
+    try:
+        llm_manager.ensure_model_exists()
+
+        query_embedding = embedder.create_embeddings([user_content])
+        relevant_chunks = store.cosine_similarity_search(query_embedding[0], n_results=k)
+
+        messages = llm_manager.build_messages(
+            system_prompt="answer the question based on the context provided, if the answer is not in the context, say 'I don't know'.",
+            prompt=user_content,
+            context="\n\n".join(relevant_chunks) if relevant_chunks else None
+        )
+
+        response_stream = llm_manager.stream_response(messages)
+
+        return StreamingResponse(response_stream, media_type="text/plain")
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
