@@ -81,22 +81,16 @@ def top_bar(chunks: int, ask_model: str, code_model: str) -> ft.Container:
             [
                 ft.Row(
                     [
-                        ft.Text("Inception-of-Context", size=20, weight=ft.FontWeight.BOLD),
+                        ft.Text("Inception-of-Context", size=18, weight=ft.FontWeight.BOLD),
                         ft.Text("Architect", size=18, weight=ft.FontWeight.W_300, color=ft.Colors.GREY_400),
                         ft.Container(
-                            content=ft.Text("Indexing", size=12, color=ft.Colors.BLUE_200),
+                            content=ft.Text(f"chunks {chunks}", size=12),
                             padding=ft.Padding.symmetric(vertical=4, horizontal=10),
                             bgcolor=ft.Colors.GREY_800,
                             border_radius=12,
                         ),
                         ft.Container(
-                            content=ft.Text("RAG", size=12, color=ft.Colors.GREEN_200),
-                            padding=ft.Padding.symmetric(vertical=4, horizontal=10),
-                            bgcolor=ft.Colors.GREY_800,
-                            border_radius=12,
-                        ),
-                        ft.Container(
-                            content=ft.Text("Generation", size=12, color=ft.Colors.BLUE_200),
+                            content=ft.Text(f"model {ask_model} / {code_model}", size=12),
                             padding=ft.Padding.symmetric(vertical=4, horizontal=10),
                             bgcolor=ft.Colors.GREY_800,
                             border_radius=12,
@@ -185,7 +179,7 @@ def build_overview_tab(page: ft.Page) -> ft.Container:
         ask_model_value.value = data.get("ask_model", "—")
         code_model_value.value = data.get("code_model", "—")
         ollama_value.value = data.get("ollama_backend", "—")
-        
+
         files = data.get("files", [])
         indexed_files.controls.clear()
         max_chunks = max((f["chunks"] for f in files), default=1)
@@ -252,7 +246,7 @@ def build_files_tab(page: ft.Page) -> ft.Container:
     file_title = ft.Text("Select a file", size=13, weight=ft.FontWeight.BOLD)
     file_meta = ft.Text("", size=12, color=ft.Colors.GREY_500)
 
-    selected_file = {"name": ""}
+    selected_file = {"name": None}
 
     def load_file(file_name: str):
         """Fetch a single file's content + chunk boundaries from the backend."""
@@ -350,32 +344,21 @@ def build_files_tab(page: ft.Page) -> ft.Container:
         print("[Files] Refresh clicked -> GET /files")
 
         # >>> FASTAPI HOOK <<<
-        resp = api.get("/files")
-        resp.raise_for_status()
-        files = resp.json()["files"]   # [{"name": "...", "chunks": N}, ...]
+        # resp = api.get("/files")
+        # resp.raise_for_status()
+        # files = resp.json()["files"]   # [{"name": "...", "chunks": N}, ...]
 
         # Placeholder list matching the screenshot:
-        if not files:
-            files = [
-                {"name": "README.md", "chunks": 1},
-                {"name": "ioc.config.yml", "chunks": 1},
-                {"name": "main.py", "chunks": 7},
-                {"name": "notes/__init__.py", "chunks": 1},
-                {"name": "notes/cli.py", "chunks": 3},
-                {"name": "notes/service.py", "chunks": 8},
-                {"name": "notes/storage.py", "chunks": 9},
-                {"name": "tests/test_service.py", "chunks": 6},
-            ]
-        # files = [
-        #     {"name": "README.md", "chunks": 1},
-        #     {"name": "ioc.config.yml", "chunks": 1},
-        #     {"name": "main.py", "chunks": 7},
-        #     {"name": "notes/__init__.py", "chunks": 1},
-        #     {"name": "notes/cli.py", "chunks": 3},
-        #     {"name": "notes/service.py", "chunks": 8},
-        #     {"name": "notes/storage.py", "chunks": 9},
-        #     {"name": "tests/test_service.py", "chunks": 6},
-        # ]
+        files = [
+            {"name": "README.md", "chunks": 1},
+            {"name": "ioc.config.yml", "chunks": 1},
+            {"name": "main.py", "chunks": 7},
+            {"name": "notes/__init__.py", "chunks": 1},
+            {"name": "notes/cli.py", "chunks": 3},
+            {"name": "notes/service.py", "chunks": 8},
+            {"name": "notes/storage.py", "chunks": 9},
+            {"name": "tests/test_service.py", "chunks": 6},
+        ]
 
         file_list_col.controls.clear()
         for f in files:
