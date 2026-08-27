@@ -6,13 +6,27 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
 
+from pydantic import BaseModel
+from typing import Literal, cast
+
+
+class PatchFile(BaseModel):
+    path: str
+    op: Literal["create", "modify", "delete", "noop"]
+    content: str = ""
+
+
+class CodePatch(BaseModel):
+    summary: str
+    files: list[PatchFile]
 
 class OllamaModelManager:
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, code_model_name: str = "testing name"):
         self.model_name = model_name
-        self._llm: ChatOllama | None = None  
-        self.code_model_name = "testing name" 
-    
+        self._llm: ChatOllama | None = None
+        self._code_llm: ChatOllama | None = None
+        self.code_model_name = code_model_name
+
     def get_code_model_name(self) -> str:
         """Return the name of the code model."""
         return self.code_model_name
@@ -82,3 +96,46 @@ class OllamaModelManager:
         for chunk in llm.stream(messages):
             if chunk.content:
                 yield chunk.content
+################################################
+    def ensure_code_model_exists(self) -> None:
+        """Check if the code model exists locally; if not, pull it."""
+        try:
+            response = ollama.list()
+            local_models = []
+            for m in response.get("models", []):
+                if isinstance(m, dict):
+                    local_models.append(m.get("model") or m.get("name"))
+                else:
+                    local_models.append(getattr(m, "model", getattr(m, "name", "")))
+
+            check_name = self.code_model_name if ":" in self.code_model_name else f"{self.code_model_name}:latest"
+
+            if not any(check_name in m for m in local_models if m):
+                logger.info(f"Code model '{self.code_model_name}' not found locally. Pulling...")
+                ollama.pull(self.code_model_name)
+                logger.info(f"Code model '{self.code_model_name}' successfully downloaded.")
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Error connecting to local Ollama server: {e}. "
+                "Make sure the Ollama service is running."
+            ) from e
+        
+
+    def get_code_model(self) -> ChatOllama:
+        """Return a cached ChatOllama instance for the code model, creating it once."""
+        if self._code_llm is None:
+            self._code_llm = ChatOllama(model=self.code_model_name, temperature=0.0)
+        return self._code_llm
+
+    def generate_code_response(
+        self,
+        messages: list[BaseMessage],
+    ) -> CodePatch:
+
+        llm = self.get_code_model()
+
+        structured_llm = llm.with_structured_output(CodePatch)
+
+        result =structured_llm.invoke(messages)
+        return cast(CodePatch, result)
