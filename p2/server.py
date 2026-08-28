@@ -13,21 +13,3 @@ app.include_router(status_router)
 async def root():
     return {"message": "Hello World"}
 
-        # try:
-        #     resp = api.get("/status")
-        #     resp.raise_for_status()
-        #     data = resp.json()
-        # except httpx.HTTPError as ex:
-        #     print(f"[Overview] Failed to reach backend: {ex}")
-        #     return
-        
-        # # Expected shape:
-        # # data = {
-        # # "chunks_indexed": 35,
-        # # "target_project": "/workspace",
-        # # "chroma_path": "/workspace/.chroma",
-        # # "ask_model": "qwen2.5:3b",
-        # # "code_model": "qwen2.5-coder:3b",
-        # # "ollama_backend": "http://ollama:11434",
-        # # "files": [{"name": "README.md", "chunks": 1}, ...],
-        # # }

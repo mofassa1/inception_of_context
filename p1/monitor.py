@@ -5,15 +5,13 @@ from utils import is_binary
 import sys
 
 class OnMyWatch:
-    # watchDirectory = "/give/the/path/of/directory"
 
-    def __init__(self, watchDirectory=None):
+    def __init__(self, watchDirectory=""):
         self.observer = Observer()
         self.watchDirectory = watchDirectory
 
 
     def run(self, store, chunker, embedder):
-        # Pass whatever instance or class attributes Handler needs
         handler = Handler(target_dir=self.watchDirectory, store=store, chunker=chunker, embedder=embedder)
         self.observer.schedule(handler, self.watchDirectory, recursive=True)
         self.observer.start()
@@ -32,7 +30,6 @@ class Handler(FileSystemEventHandler):
 
     def __init__(self, target_dir, store, chunker, embedder):
         super().__init__()
-        # Store attributes on self for access inside event methods
         self.target_dir = target_dir
         self.store = store
         self.chunker = chunker

@@ -5,3 +5,5 @@ p1/chroma.sqlite3
 p2/__pycache__/
 p2/routes/__pycache__/
 tests/
+test.py
+download_model.py

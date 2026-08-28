@@ -1,6 +1,11 @@
 import os
-
 from monitor import OnMyWatch
+from chunker import Chunker
+from embedder import Embedder
+from db import VectorStore
+from general_infos_object import g_infos
+import sys
+from pathlib import Path
 
 
 def is_binary(path: str, chunk_size: int = 1024) -> bool:
@@ -29,8 +34,7 @@ def walk_target(target_path: str, chroma_path: str):
                 continue
             yield fpath
 
-import sys
-from pathlib import Path
+
 
 
 def to_abs_path(target_path: str) -> str:
@@ -41,28 +45,27 @@ def to_abs_path(target_path: str) -> str:
 
     return str(directory)
 
-from chunker import Chunker
-from embedder import Embedder
-from db import VectorStore
 
 if __name__ == "__main__":
     argument_count = len(sys.argv)
-    if argument_count != 3:
+    if argument_count != 2:
         print("invalid arguiment count ")
-        print("usage : program <target_path> <chroma_path>")
+        print("usage : program <target_path> ")
         sys.exit(1)
     target_path : str = ""
     chroma_path : str = ""
     try:
         target_path = to_abs_path(sys.argv[1])
-        chroma_path = to_abs_path(sys.argv[2])
+        chroma_path = to_abs_path("../chroma_db")
+        g_infos.set_target_path(target_path)
+        g_infos.set_chroma_path(chroma_path)
     except ValueError as e:
         print(f"Error: {e}")
     
     chunker = Chunker()
     embedder = Embedder()
 
-    store = VectorStore("../chroma_db", collection_name="codebase")
+    store = VectorStore(chroma_path=chroma_path, collection_name="codebase")
 
     for filepath in walk_target(target_path, chroma_path):
 
@@ -87,18 +90,8 @@ if __name__ == "__main__":
                     "content_hash": chunk.content_hash
                 }]
             )
-            print("*" * 20)
-            print(f"Indexed chunk: {chunk.id}")
-            print("chunk stored in db with metadata:")
-            print(store.get_chunks_by_ids([chunk.id]))
 
 
-    # for filepath in walk_target(target_path, chroma_path):
-    #     stored_chunks: dict = store.get_file_chunks(filepath)
-
-    #     for chunk_id, metadata in zip((stored_chunks.get("ids", [])), stored_chunks.get('metadatas', [])):
-
-            # embedding = store.collection.get(ids=[chunk_id], include=["embeddings"])["embeddings"][0]
     print(f"Total chunks indexed: {store.get_all_chunks_count()}")
 
     watch = OnMyWatch(watchDirectory=target_path)

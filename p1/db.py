@@ -3,13 +3,16 @@ import chromadb
 import os
 import sys
 import pathlib
-os.environ["TOKENIZERS_PARALLELISM"] = "false"  # avoid warning spam from HuggingFace tokenizers
-os.environ["HF_HUB_OFFLINE"] = "1"  # lock offline mode for the rest of the process's lifetime
+from general_infos_object import g_infos
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false" 
+os.environ["HF_HUB_OFFLINE"] = "1"  
 
 class VectorStore:
     def __init__(self, chroma_path: str, collection_name: str):
         absolute_path = pathlib.Path(chroma_path).resolve()
         self.chroma_path = str(absolute_path)
+        self.collection_name = collection_name
 
         print(f"Chroma path: {absolute_path}")
         print(f"Collection: {collection_name}")
@@ -22,7 +25,9 @@ class VectorStore:
             name=collection_name
         )
 
-
+        g_infos.set_chroma_path(self.chroma_path)
+        g_infos.set_collection_name(self.collection_name)
+        
     def add(
         self,
         ids: list[str],

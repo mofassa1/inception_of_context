@@ -1,22 +1,21 @@
-# chunker.py
 from dataclasses import dataclass
-
+import ast
+import re
 from matplotlib import lines
+from general_infos_object import g_infos
 
 @dataclass
 class Chunk:
-    id: str              # stable identity: "path/to/file.py::ClassName.method_name"
-    file: str             # relative path from target root
-    kind: str              # "function" | "async_function" | "class" | "config"
-    qualified_name: str      # "ClassName.method_name" or "function_name"
-    content: str               # exact source text of the chunk (decorators included)
+    id: str
+    file: str
+    kind: str           
+    qualified_name: str
+    content: str
     start_line: int
     end_line: int
     content_hash: str
 
-import ast
 
-import re
 
 FUNC_PATTERN = re.compile(r'^\s*(def|function|func|fn)\s+(\w+)', re.MULTILINE)
 
@@ -57,7 +56,6 @@ class Chunker:
 
         visit(tree, [])
 
-        # --- NEW: capture module-level lines not claimed by any function/class ---
         module_chunks = self._extract_module_level_chunks(filepath, tree, lines)
         chunks.extend(module_chunks)
 
@@ -65,8 +63,6 @@ class Chunker:
         return chunks
     
     def _extract_module_level_chunks(self, filepath: str, tree: ast.Module, lines: list[str]) -> list[Chunk]:
-        # Only look at TOP-LEVEL statements (tree.body), not nested ones —
-        # nested module-level code inside functions is already part of that function's chunk.
         top_level_func_class_lines = set()
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -84,7 +80,6 @@ class Chunker:
         if not leftover_line_nums:
             return []
 
-        # group leftover lines into contiguous runs (handles blank-line gaps between them)
         runs = []
         run_start = leftover_line_nums[0]
         prev = run_start
@@ -99,7 +94,7 @@ class Chunker:
         for i, (start, end) in enumerate(runs):
             content = "".join(lines[start - 1: end])
             if not content.strip():
-                continue  # skip pure-whitespace runs (e.g. blank line between imports and class)
+                continue 
             name = "__module__" if i == 0 else f"__module__{i}"
             chunks.append(Chunk(
                 id=f"{filepath}::{name}",
@@ -129,7 +124,7 @@ class Chunker:
                 start_line=start_line, end_line=end_line,
                 content_hash=hash_chunk("".join(lines[start_line - 1 : end_line])
             )))
-        if not chunks:  # nothing matched — index the whole file as one chunk
+        if not chunks: 
             chunks = [Chunk(id=f"{filepath}::__file__", file=filepath, kind="raw",
                             qualified_name="__file__", content=source,
                             start_line=1, end_line=len(lines),
@@ -139,15 +134,13 @@ class Chunker:
 
 
     def _build_chunk(self, filepath, node, lines, qualified_name, kind) -> Chunk:
-        # ast gives you node.lineno (1-indexed, start of `def`/`class` keyword)
-        # BUT decorators are separate nodes with their own lineno, listed BEFORE node.lineno
         start = node.lineno
         if node.decorator_list:
             start = min(d.lineno for d in node.decorator_list)
 
-        end = node.end_lineno  # Python 3.8+: end line is populated automatically
+        end = node.end_lineno
 
-        content = "".join(lines[start - 1 : end])  # slice is 0-indexed, lines are 1-indexed
+        content = "".join(lines[start - 1 : end])  
 
         return Chunk(
             id=f"{filepath}::{qualified_name}",

@@ -3,7 +3,7 @@ import logging
 import ollama
 from langchain_ollama import ChatOllama
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-
+from p1.general_infos_object import g_infos
 logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel
@@ -21,11 +21,13 @@ class CodePatch(BaseModel):
     files: list[PatchFile]
 
 class OllamaModelManager:
-    def __init__(self, model_name: str, code_model_name: str = "testing name"):
+    def __init__(self, model_name: str, code_model_name: str = "qwen2.5-coder:3b"):
         self.model_name = model_name
         self._llm: ChatOllama | None = None
         self._code_llm: ChatOllama | None = None
         self.code_model_name = code_model_name
+        g_infos.set_llm_name(self.model_name)
+        g_infos.set_code_llm_name(self.code_model_name)
 
     def get_code_model_name(self) -> str:
         """Return the name of the code model."""
@@ -96,6 +98,7 @@ class OllamaModelManager:
         for chunk in llm.stream(messages):
             if chunk.content:
                 yield chunk.content
+                
 ################################################
     def ensure_code_model_exists(self) -> None:
         """Check if the code model exists locally; if not, pull it."""
