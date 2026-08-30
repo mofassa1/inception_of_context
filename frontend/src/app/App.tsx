@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { chooseFolder } from "./api.js";
+import { addRecentFolder } from "./recentFolders.js";
+import { ActivityBar } from "./components/ActivityBar.js";
 import { TitleBar } from "./components/TitleBar.js";
 import { Welcome } from "./components/Welcome.js";
+import { ChatPanel } from "./components/chat/ChatPanel.js";
 import { Sidebar } from "./components/sidebar/Sidebar.js";
 import { Editor } from "./components/editor/Editor.js";
 import { StatusBar } from "./components/editor/StatusBar.js";
@@ -26,6 +29,8 @@ const APP_NAME = "not vscode";
 
 export function App() {
   const [root, setRoot] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatWidth, setChatWidth] = useState(380);
   const tabs = useTabs();
 
   const folderName = root ? root.split("/").pop() || root : null;
@@ -33,6 +38,11 @@ export function App() {
 
   const closeAllTabs = useRef(tabs.closeAll);
   closeAllTabs.current = tabs.closeAll;
+
+  function openFolder(path: string) {
+    addRecentFolder(path);
+    setRoot(path);
+  }
 
   useEffect(() => {
     document.title = [activeName, folderName, APP_NAME].filter(Boolean).join(" — ");
@@ -43,13 +53,15 @@ export function App() {
       if (action === "open-folder") {
         try {
           const picked = await chooseFolder();
-          if (picked) setRoot(picked);
+          if (picked) openFolder(picked);
         } catch (err) {
           alert("Couldn't open folder: " + (err as Error).message);
         }
       } else if (action === "close-folder") {
         setRoot(null);
         closeAllTabs.current();
+      } else if (action === "toggle-chat") {
+        setChatOpen((v) => !v);
       }
     });
   }, []);
@@ -58,7 +70,7 @@ export function App() {
     <>
       <TitleBar label={folderName ?? APP_NAME} title={root ?? undefined} />
       {!root ? (
-        <Welcome onOpen={setRoot} />
+        <Welcome onOpen={openFolder} />
       ) : (
         <div className="ide">
           <Sidebar
@@ -85,6 +97,13 @@ export function App() {
             )}
             <StatusBar tab={tabs.activeTab} />
           </div>
+          <ChatPanel
+            open={chatOpen}
+            onClose={() => setChatOpen(false)}
+            width={chatWidth}
+            onResize={setChatWidth}
+          />
+          <ActivityBar chatOpen={chatOpen} onToggleChat={() => setChatOpen((v) => !v)} />
         </div>
       )}
     </>

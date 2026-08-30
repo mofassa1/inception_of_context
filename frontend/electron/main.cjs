@@ -1,24 +1,5 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog } = require("electron");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
-
-let backend = null;
-
-function startBackend() {
-  const backendDir = path.join(__dirname, "..", "..", "backend");
-  backend = spawn("uv", ["run", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"], {
-    cwd: backendDir,
-    stdio: "inherit",
-  });
-  backend.on("error", (err) => {
-    console.error("Failed to start backend:", err);
-  });
-}
-
-function stopBackend() {
-  backend?.kill();
-  backend = null;
-}
 
 function buildMenu(win) {
   const isMac = process.platform === "darwin";
@@ -28,8 +9,16 @@ function buildMenu(win) {
     {
       label: "File",
       submenu: [
-        { label: "Open Folder…", accelerator: "CmdOrCtrl+O", click: () => sendMenu("open-folder") },
-        { label: "Close Folder", accelerator: "CmdOrCtrl+W", click: () => sendMenu("close-folder") },
+        {
+          label: "Open Folder…",
+          accelerator: "CmdOrCtrl+O",
+          click: () => sendMenu("open-folder"),
+        },
+        {
+          label: "Close Folder",
+          accelerator: "CmdOrCtrl+W",
+          click: () => sendMenu("close-folder"),
+        },
         { type: "separator" },
         isMac ? { role: "close" } : { role: "quit" },
       ],
@@ -49,6 +38,12 @@ function buildMenu(win) {
     {
       label: "View",
       submenu: [
+        {
+          label: "Toggle Chat",
+          accelerator: "CmdOrCtrl+\\",
+          click: () => sendMenu("toggle-chat"),
+        },
+        { type: "separator" },
         { role: "reload" },
         { role: "forceReload" },
         { role: "toggleDevTools" },
@@ -84,7 +79,9 @@ function createWindow() {
   buildMenu(win);
 
   win.on("maximize", () => win.webContents.send("win:maximize-changed", true));
-  win.on("unmaximize", () => win.webContents.send("win:maximize-changed", false));
+  win.on("unmaximize", () =>
+    win.webContents.send("win:maximize-changed", false),
+  );
 
   win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
 }
@@ -106,10 +103,11 @@ ipcMain.on("win:toggle-maximize", (e) => {
   else win.maximize();
 });
 ipcMain.on("win:close", (e) => windowFrom(e)?.close());
-ipcMain.handle("win:is-maximized", (e) => Boolean(windowFrom(e)?.isMaximized()));
+ipcMain.handle("win:is-maximized", (e) =>
+  Boolean(windowFrom(e)?.isMaximized()),
+);
 
 app.whenReady().then(() => {
-  startBackend();
   createWindow();
 
   app.on("activate", () => {
@@ -120,5 +118,3 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
-
-app.on("before-quit", stopBackend);
