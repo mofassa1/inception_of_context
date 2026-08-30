@@ -98,6 +98,7 @@ export function App() {
             <StatusBar tab={tabs.activeTab} />
           </div>
           <ChatPanel
+            root={root}
             open={chatOpen}
             onClose={() => setChatOpen(false)}
             width={chatWidth}

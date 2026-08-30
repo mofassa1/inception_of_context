@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Sparkles, Trash2, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { RefreshCw, Sparkles, Trash2, X } from "lucide-react";
+import { askAgentStream, indexWorkspace } from "../../api.js";
 import { ChatComposer } from "./ChatComposer.js";
 import { ChatMessages } from "./ChatMessages.js";
 
@@ -13,15 +14,14 @@ export type ChatMessage = {
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 640;
 
-const STUB_REPLY =
-  "The AI agent isn't connected yet — once wired up it will reply here and can edit files in your workspace.";
-
 export function ChatPanel({
+  root,
   open,
   onClose,
   width,
   onResize,
 }: {
+  root: string;
   open: boolean;
   onClose: () => void;
   width: number;
@@ -29,16 +29,71 @@ export function ChatPanel({
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [indexing, setIndexing] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  function send(raw: string) {
+  function patchMessage(id: string, text: string) {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, text } : m)));
+  }
+
+  async function send(raw: string) {
     const text = raw.trim();
-    if (!text) return;
+    if (!text || busy) return;
+
     const now = Date.now();
+    const replyId = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
       { id: crypto.randomUUID(), role: "user", text, at: now },
-      { id: crypto.randomUUID(), role: "assistant", text: STUB_REPLY, at: now + 1 },
+      { id: replyId, role: "assistant", text: "", at: now + 1 },
     ]);
+
+    setBusy(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let answer = "";
+    try {
+      await askAgentStream(
+        text,
+        (chunk) => {
+          answer += chunk;
+          patchMessage(replyId, answer);
+        },
+        controller.signal,
+      );
+      if (!answer) patchMessage(replyId, "(no response)");
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        patchMessage(replyId, answer || `⚠ ${(err as Error).message}`);
+      } else if (!answer) {
+        patchMessage(replyId, "(stopped)");
+      }
+    } finally {
+      abortRef.current = null;
+      setBusy(false);
+    }
+  }
+
+  function clear() {
+    abortRef.current?.abort();
+    setMessages([]);
+    setNote(null);
+  }
+
+  async function reindex() {
+    if (indexing) return;
+    setIndexing(true);
+    setNote("Indexing workspace…");
+    try {
+      const res = await indexWorkspace(root);
+      setNote(`Indexed ${res.chunks_indexed} chunks from ${res.files_indexed} files.`);
+    } catch (err) {
+      setNote(`Indexing failed: ${(err as Error).message}`);
+    } finally {
+      setIndexing(false);
+    }
   }
 
   function startResize(e: React.MouseEvent) {
@@ -73,9 +128,18 @@ export function ChatPanel({
           <div className="chat-head-actions">
             <button
               className="icon-btn"
+              title="Index workspace"
+              aria-label="Index workspace"
+              disabled={indexing}
+              onClick={reindex}
+            >
+              <RefreshCw size={14} className={indexing ? "spin" : undefined} />
+            </button>
+            <button
+              className="icon-btn"
               title="Clear conversation"
               aria-label="Clear conversation"
-              onClick={() => setMessages([])}
+              onClick={clear}
             >
               <Trash2 size={14} />
             </button>
@@ -89,8 +153,15 @@ export function ChatPanel({
             </button>
           </div>
         </div>
-        <ChatMessages messages={messages} open={open} />
-        <ChatComposer draft={draft} onDraftChange={setDraft} onSend={send} />
+        {note && <div className="chat-note">{note}</div>}
+        <ChatMessages messages={messages} open={open} busy={busy} />
+        <ChatComposer
+          draft={draft}
+          busy={busy}
+          onDraftChange={setDraft}
+          onSend={send}
+          onStop={() => abortRef.current?.abort()}
+        />
       </div>
     </div>
   );

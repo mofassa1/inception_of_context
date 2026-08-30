@@ -5,9 +5,11 @@ import type { ChatMessage } from "./ChatPanel.js";
 export function ChatMessages({
   messages,
   open,
+  busy,
 }: {
   messages: ChatMessage[];
   open: boolean;
+  busy: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -26,7 +28,7 @@ export function ChatMessages({
 
   useEffect(() => {
     if (stickToBottom.current) scrollToBottom();
-  }, [messages]);
+  }, [messages, busy]);
 
   useEffect(() => {
     if (open) {
@@ -52,22 +54,39 @@ export function ChatMessages({
     );
   }
 
+  const lastId = messages[messages.length - 1]?.id;
+
   return (
     <div className="chat-messages" ref={scrollRef} onScroll={onScroll}>
-      {messages.map((message) =>
-        message.role === "user" ? (
-          <div key={message.id} className="chat-row chat-row-user">
-            <div className="chat-bubble">{message.text}</div>
-          </div>
-        ) : (
+      {messages.map((message) => {
+        if (message.role === "user") {
+          return (
+            <div key={message.id} className="chat-row chat-row-user">
+              <div className="chat-bubble">{message.text}</div>
+            </div>
+          );
+        }
+
+        const streaming = busy && message.id === lastId;
+        return (
           <div key={message.id} className="chat-row chat-row-agent">
             <div className="chat-avatar">
               <Sparkles size={13} />
             </div>
-            <div className="chat-agent-text">{message.text}</div>
+            <div className="chat-agent-text">
+              {message.text}
+              {streaming && !message.text && (
+                <span className="chat-dots" aria-label="Thinking">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              )}
+              {streaming && message.text && <span className="chat-caret" />}
+            </div>
           </div>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }

@@ -68,3 +68,40 @@ export function renameEntry(
     body: JSON.stringify({ path, new_path: newPath }),
   });
 }
+
+export function indexWorkspace(
+  path: string,
+): Promise<{ path: string; files_indexed: number; chunks_indexed: number }> {
+  return req(`/api/agent/index`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+}
+
+export async function askAgentStream(
+  query: string,
+  onChunk: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(BASE + `/api/agent/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? `${res.status} ${res.statusText}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) onChunk(decoder.decode(value, { stream: true }));
+  }
+  const tail = decoder.decode();
+  if (tail) onChunk(tail);
+}

@@ -1,16 +1,20 @@
 import { useEffect, useRef } from "react";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Square } from "lucide-react";
 
 const MAX_HEIGHT = 160;
 
 export function ChatComposer({
   draft,
+  busy,
   onDraftChange,
   onSend,
+  onStop,
 }: {
   draft: string;
+  busy: boolean;
   onDraftChange: (value: string) => void;
   onSend: (text: string) => void;
+  onStop: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -23,7 +27,7 @@ export function ChatComposer({
 
   function submit() {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || busy) return;
     onSend(text);
     onDraftChange("");
   }
@@ -45,14 +49,24 @@ export function ChatComposer({
             }
           }}
         />
-        <button
-          className="chat-send"
-          aria-label="Send message"
-          disabled={!draft.trim()}
-          onClick={submit}
-        >
-          <ArrowUp size={16} strokeWidth={2.5} />
-        </button>
+        {busy ? (
+          <button
+            className="chat-send chat-stop"
+            aria-label="Stop"
+            onClick={onStop}
+          >
+            <Square size={12} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            className="chat-send"
+            aria-label="Send message"
+            disabled={!draft.trim()}
+            onClick={submit}
+          >
+            <ArrowUp size={16} strokeWidth={2.5} />
+          </button>
+        )}
       </div>
       <div className="chat-hint">
         <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
