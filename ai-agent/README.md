@@ -7,6 +7,8 @@ RAG + coding-agent service (vendored from the `main` branch).
 - `p1/` — codebase indexer: AST chunker, HF embeddings, ChromaDB store, file watcher
 - `p2/` — FastAPI service over Ollama (`/query`, `/retrieve`, `/ask/stream`, `/status`, `/files`)
 - `p3_beta/` — structured `CodePatch` generation, sanity checks, atomic apply, test loop
+- `serve.py` — uvicorn entry point: `p2.server.app` + `POST /index` (from `agent_index.py`)
+- `agent_index.py` — `POST /index {path}`, reuses `p1` classes; leaves `p1/ p2/ p3_beta/` untouched
 
 ## Prerequisites
 
@@ -32,11 +34,14 @@ cache dir, or Chroma path differ.
 All commands run from this directory (`ai-agent/`), which puts `p1` / `p2` /
 `p3_beta` on the import path.
 
-Serve the API:
+Serve the API (`make agent` does this):
 
 ```
-uvicorn p2.server:app --host 127.0.0.1 --port 8001
+uvicorn serve:app --host 127.0.0.1 --port 8001
 ```
+
+The IDE backend proxies this service at `/api/agent/*` (see `backend/main.py`),
+so the desktop app only talks to `:8000`.
 
 Index a project (also starts a watcher for incremental re-index):
 

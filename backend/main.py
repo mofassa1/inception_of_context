@@ -2,12 +2,16 @@ import os
 import shutil
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 load_dotenv()
+
+AGENT_URL = os.getenv("AGENT_URL", "http://127.0.0.1:8001").rstrip("/")
 
 app = FastAPI(
     title="Mini IDE Backend",
@@ -19,6 +23,7 @@ app = FastAPI(
     openapi_tags=[
         {"name": "Health", "description": "Service health checks."},
         {"name": "Filesystem", "description": "Operations on the local filesystem."},
+        {"name": "Agent", "description": "Proxied calls to the AI agent service."},
     ],
 )
 app.add_middleware(
@@ -130,6 +135,70 @@ def rename_entry(body: RenameBody):
         raise HTTPException(409, f"already exists: {dst}")
     src.rename(dst)
     return {"path": str(dst), "is_dir": dst.is_dir()}
+
+
+class AgentIndexBody(BaseModel):
+    path: str
+
+
+class AgentAskBody(BaseModel):
+    query: str
+    k: int = 5
+
+
+async def _agent_request(method: str, path: str, json: dict | None = None):
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            res = await client.request(method, f"{AGENT_URL}{path}", json=json)
+    except httpx.RequestError as exc:
+        raise HTTPException(502, f"agent service unavailable: {exc}") from exc
+    if res.status_code >= 400:
+        raise HTTPException(res.status_code, res.text)
+    return res.json()
+
+
+@app.get("/api/agent/health", tags=["Agent"], summary="Agent liveness")
+async def agent_health():
+    return await _agent_request("GET", "/")
+
+
+@app.get("/api/agent/status", tags=["Agent"], summary="Agent index / model status")
+async def agent_status():
+    return await _agent_request("GET", "/status/")
+
+
+@app.post("/api/agent/index", tags=["Agent"], summary="Index a folder into the agent")
+async def agent_index(body: AgentIndexBody):
+    return await _agent_request("POST", "/index", {"path": body.path})
+
+
+@app.post("/api/agent/retrieve", tags=["Agent"], summary="Nearest chunks (no LLM)")
+async def agent_retrieve(body: AgentAskBody):
+    return await _agent_request(
+        "POST", "/retrieve", {"query": body.query, "k": body.k}
+    )
+
+
+@app.post("/api/agent/ask", tags=["Agent"], summary="Ask the agent (streamed)")
+async def agent_ask(body: AgentAskBody):
+    async def stream():
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream(
+                    "POST",
+                    f"{AGENT_URL}/ask/stream",
+                    json={"query": body.query, "k": body.k},
+                ) as res:
+                    if res.status_code >= 400:
+                        await res.aread()
+                        yield f"[agent error {res.status_code}] {res.text}".encode()
+                        return
+                    async for chunk in res.aiter_bytes():
+                        yield chunk
+        except httpx.RequestError as exc:
+            yield f"[agent service unavailable] {exc}".encode()
+
+    return StreamingResponse(stream(), media_type="text/plain")
 
 
 if __name__ == "__main__":
