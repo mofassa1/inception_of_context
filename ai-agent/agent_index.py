@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from p1.chunker import Chunker
-from p1.embedder import Embedder
+from p2.embidder_object import embedder
 from p2.store import vector_store as store
 
 router = APIRouter(tags=["index"])
@@ -22,7 +22,6 @@ EXCLUDED_DIRS = {
 }
 
 _chunker = Chunker()
-_embedder = Embedder()
 
 
 class IndexRequest(BaseModel):
@@ -72,7 +71,7 @@ def index_path(request: IndexRequest):
         if not chunks:
             continue
 
-        vectors = _embedder.create_embeddings([_embed_text(c) for c in chunks])
+        vectors = embedder.create_embeddings([_embed_text(c) for c in chunks])
         store.collection.upsert(
             ids=[c.id for c in chunks],
             documents=[c.content for c in chunks],
