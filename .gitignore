@@ -1,0 +1,22 @@
+# --- Node / frontend ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# --- Python / backend ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- Environment ---
+.env
+.env.*
+!.env.example
+
+# --- Logs / OS ---
+*.log
+.DS_Store
+Thumbs.db
