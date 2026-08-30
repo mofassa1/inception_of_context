@@ -21,61 +21,94 @@ import { languages } from "@codemirror/language-data";
 import type { Extension } from "@codemirror/state";
 import { tags as t } from "@lezer/highlight";
 
+const MONO_FONT =
+  'ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace';
+
 const theme = EditorView.theme(
   {
-    "&": { color: "#dbe4f3", backgroundColor: "transparent", height: "100%" },
+    "&": { color: "#abb2bf", backgroundColor: "#23272e", height: "100%" },
     ".cm-scroller": {
-      fontFamily:
-        "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
-      fontSize: "13px",
-      lineHeight: "1.7",
+      fontFamily: MONO_FONT,
+      fontSize: "13.5px",
+      lineHeight: "1.6",
       overflow: "auto",
     },
-    ".cm-content": { padding: "14px 0 60vh 0", caretColor: "#36b6ff" },
+    ".cm-content": { padding: "4px 0 40vh 0", caretColor: "#528bff" },
     ".cm-gutters": {
-      backgroundColor: "transparent",
+      backgroundColor: "#23272e",
       border: "none",
-      color: "#46506a",
+      color: "#495162",
       paddingRight: "4px",
     },
     ".cm-lineNumbers .cm-gutterElement": { padding: "0 6px 0 12px" },
     ".cm-line": { padding: "0 16px" },
-    ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.035)" },
-    ".cm-activeLineGutter": {
-      backgroundColor: "transparent",
-      color: "#8a97b8",
-    },
-    ".cm-cursor": { borderLeftColor: "#36b6ff" },
+    ".cm-activeLine": { backgroundColor: "#2c313c" },
+    ".cm-activeLineGutter": { backgroundColor: "#2c313c", color: "#abb2bf" },
+    ".cm-cursor": { borderLeftColor: "#528bff" },
     "&.cm-focused": { outline: "none" },
     ".cm-selectionBackground, ::selection": {
-      backgroundColor: "rgba(54,182,255,0.22) !important",
+      backgroundColor: "rgba(103, 118, 150, 0.38) !important",
     },
   },
   { dark: true },
 );
 
 const highlight = HighlightStyle.define([
-  { tag: t.keyword, color: "#8aa6ff" },
-  { tag: [t.controlKeyword, t.moduleKeyword], color: "#c79bff" },
-  { tag: [t.string, t.special(t.string)], color: "#86e0a8" },
-  { tag: t.comment, color: "#5b6680", fontStyle: "italic" },
-  { tag: [t.number, t.bool, t.null, t.atom], color: "#f3ab73" },
+  {
+    tag: [
+      t.keyword,
+      t.controlKeyword,
+      t.moduleKeyword,
+      t.definitionKeyword,
+      t.operatorKeyword,
+    ],
+    color: "#c678dd",
+  },
+  {
+    tag: [t.string, t.special(t.string), t.regexp, t.attributeValue],
+    color: "#98c379",
+  },
+  { tag: [t.comment, t.meta], color: "#7f848e", fontStyle: "italic" },
+  {
+    tag: [t.number, t.integer, t.float, t.constant(t.variableName), t.self],
+    color: "#d19a66",
+  },
+  { tag: [t.bool, t.null, t.atom, t.escape], color: "#56b6c2" },
   {
     tag: [t.function(t.variableName), t.function(t.propertyName)],
-    color: "#62c9ff",
+    color: "#61afef",
   },
-  { tag: [t.typeName, t.className], color: "#5fd6d0" },
-  { tag: t.propertyName, color: "#9fb3d6" },
-  { tag: t.tagName, color: "#8aa6ff" },
-  { tag: t.attributeName, color: "#86e0a8" },
-  { tag: t.operator, color: "#9fb3d6" },
-  { tag: t.variableName, color: "#dbe4f3" },
-  { tag: [t.brace, t.bracket, t.paren, t.punctuation], color: "#7d8aab" },
+  { tag: [t.typeName, t.className, t.namespace], color: "#e5c07b" },
+  { tag: [t.variableName, t.propertyName, t.tagName], color: "#e06c75" },
+  { tag: t.attributeName, color: "#d19a66" },
+  {
+    tag: [t.operator, t.punctuation, t.brace, t.bracket, t.paren],
+    color: "#abb2bf",
+  },
+  { tag: t.heading, color: "#e06c75", fontWeight: "bold" },
+  { tag: [t.link, t.url], color: "#61afef" },
+  { tag: t.emphasis, fontStyle: "italic" },
+  { tag: t.strong, fontWeight: "bold" },
+  { tag: t.strikethrough, textDecoration: "line-through" },
 ]);
+
+function matchName(name: string): string {
+  const lower = name.toLowerCase();
+  if (
+    lower === "makefile" ||
+    lower === "gnumakefile" ||
+    lower.endsWith(".mk") ||
+    lower.endsWith(".mak")
+  ) {
+    return "recipe.sh";
+  }
+  if (lower.endsWith(".lock")) return "deps.toml";
+  return name;
+}
 
 async function languageFor(path: string): Promise<Extension[]> {
   const name = path.split("/").pop() ?? path;
-  const desc = LanguageDescription.matchFilename(languages, name);
+  const desc = LanguageDescription.matchFilename(languages, matchName(name));
   if (!desc) return [];
   try {
     return [await desc.load()];
@@ -84,7 +117,9 @@ async function languageFor(path: string): Promise<Extension[]> {
   }
 }
 
-function sharedExtensions(onChange: (state: EditorState) => void): Extension[] {
+export function buildExtensions(
+  onChange: (state: EditorState) => void,
+): Extension[] {
   return [
     lineNumbers(),
     history(),
@@ -100,38 +135,13 @@ function sharedExtensions(onChange: (state: EditorState) => void): Extension[] {
   ];
 }
 
-export type Editor = {
-  view: EditorView;
-  open(state: EditorState): void;
-  destroy(): void;
-};
-
-export function createEditor(
-  parent: HTMLElement,
-  onChange: (state: EditorState) => void,
-): Editor {
-  const view = new EditorView({
-    parent,
-    state: EditorState.create({
-      doc: "",
-      extensions: sharedExtensions(onChange),
-    }),
-  });
-
-  return {
-    view,
-    open: (state) => view.setState(state),
-    destroy: () => view.destroy(),
-  };
-}
-
-export async function createFileState(
+export async function createDocState(
   path: string,
   code: string,
   onChange: (state: EditorState) => void,
 ): Promise<EditorState> {
   return EditorState.create({
     doc: code,
-    extensions: [...sharedExtensions(onChange), ...(await languageFor(path))],
+    extensions: [...buildExtensions(onChange), ...(await languageFor(path))],
   });
 }

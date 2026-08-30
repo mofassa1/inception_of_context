@@ -17,6 +17,13 @@ export function listDir(
   return req(`/api/fs/list?path=${encodeURIComponent(path)}`);
 }
 
+export async function chooseFolder(): Promise<string | null> {
+  const picked = await window.ide?.pickFolder();
+  if (!picked) return null;
+  await listDir(picked);
+  return picked;
+}
+
 export function readFile(
   path: string,
 ): Promise<{ path: string; content: string }> {

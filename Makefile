@@ -11,11 +11,11 @@ install-backend:
 build:
 	cd frontend && npm run build
 
-frontend: build
+frontend: install-frontend build
 	-fuser -k 8000/tcp
 	cd frontend && npx electron .
 
-backend:
+backend: install-backend
 	-fuser -k 8000/tcp
 	cd backend && uv run uvicorn main:app --host 127.0.0.1 --port 8000
 
