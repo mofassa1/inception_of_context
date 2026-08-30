@@ -5,7 +5,18 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI()
+app = FastAPI(
+    title="Mini IDE Backend",
+    description="Local filesystem API for the mini IDE desktop app.",
+    version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    openapi_tags=[
+        {"name": "Health", "description": "Service health checks."},
+        {"name": "Filesystem", "description": "Operations on the local filesystem."},
+    ],
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,12 +33,12 @@ def _resolve(raw: str) -> Path:
     return Path(raw).expanduser().resolve()
 
 
-@app.get("/")
+@app.get("/", tags=["Health"], summary="Health check")
 def hello():
     return "hello"
 
 
-@app.get("/api/fs/list")
+@app.get("/api/fs/list", tags=["Filesystem"], summary="List directory entries")
 def list_dir(path: str):
     p = _resolve(path)
     if not p.is_dir():
@@ -41,7 +52,7 @@ def list_dir(path: str):
     return {"path": str(p), "entries": entries}
 
 
-@app.get("/api/fs/read")
+@app.get("/api/fs/read", tags=["Filesystem"], summary="Read a text file")
 def read_file(path: str):
     p = _resolve(path)
     if not p.is_file():
@@ -58,7 +69,7 @@ class WriteBody(BaseModel):
     content: str
 
 
-@app.put("/api/fs/write")
+@app.put("/api/fs/write", tags=["Filesystem"], summary="Write content to a file")
 def write_file(body: WriteBody):
     p = _resolve(body.path)
     if not p.is_file():
@@ -72,7 +83,7 @@ class CreateBody(BaseModel):
     is_dir: bool = False
 
 
-@app.post("/api/fs/create")
+@app.post("/api/fs/create", tags=["Filesystem"], summary="Create a file or directory")
 def create_entry(body: CreateBody):
     p = _resolve(body.path)
     if p.exists():
@@ -86,7 +97,7 @@ def create_entry(body: CreateBody):
     return {"path": str(p), "is_dir": body.is_dir}
 
 
-@app.delete("/api/fs/delete")
+@app.delete("/api/fs/delete", tags=["Filesystem"], summary="Delete a file or directory")
 def delete_entry(path: str):
     p = _resolve(path)
     if not p.exists():
@@ -103,7 +114,7 @@ class RenameBody(BaseModel):
     new_path: str
 
 
-@app.post("/api/fs/rename")
+@app.post("/api/fs/rename", tags=["Filesystem"], summary="Rename a file or directory")
 def rename_entry(body: RenameBody):
     src = _resolve(body.path)
     dst = _resolve(body.new_path)
