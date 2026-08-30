@@ -1,18 +1,27 @@
 # mini IDE
 
 A small desktop IDE that lets you open a folder, browse its file tree, edit
-files in a CodeMirror editor, and autosave changes back to disk.
+files in a CodeMirror editor, autosave changes back to disk, and ask a built-in
+AI agent about the code.
+
+![screenshot](screenshot.png)
 
 ## Architecture
+
+The app is three connected services:
 
 - `frontend/` — Electron + React + Vite + TypeScript desktop app.
   - CodeMirror 6 editor with a custom dark theme and syntax highlighting.
   - React Query for filesystem requests and cache invalidation.
   - Debounced autosave (280 ms) with saved / saving / error status.
-- `backend/` — FastAPI backend that exposes a local filesystem API on
-  `127.0.0.1:8000`.
-  - List, read, write, create, delete, and rename files/directories.
-- `Makefile` — Convenience targets for install, build, and run.
+  - Chat panel that talks to the agent through the backend.
+- `backend/` — FastAPI service on `127.0.0.1:8000`.
+  - Local filesystem API: list, read, write, create, delete, rename.
+  - Proxies chat requests to the agent (`AGENT_URL`, default
+    `127.0.0.1:8001`).
+- `ai-agent/` — FastAPI service on `127.0.0.1:8001`.
+  - RAG agent over the open project (LangGraph + Chroma + Ollama).
+- `Makefile` — install, build, and run targets.
 
 ## Requirements
 
@@ -25,25 +34,27 @@ files in a CodeMirror editor, and autosave changes back to disk.
 make install
 ```
 
-This runs `npm install` in `frontend/` and `uv sync` in `backend/`.
+Installs all three services: `npm install` in `frontend/`, `uv sync` in
+`backend/`, and a `uv` venv with `requirements.txt` in `ai-agent/`.
 
 ## Usage
 
-Run the backend only:
+Run the whole app (agent on `:8001` and backend on `:8000` in the background,
+Electron in the foreground):
 
 ```bash
-make backend
+make app
 ```
 
-Build the frontend and launch the Electron desktop app (it also starts the
-backend automatically):
+Quitting the app or pressing Ctrl-C frees ports 8000 and 8001.
+
+### Individual services
 
 ```bash
-make frontend
+make frontend   # build + launch Electron only
+make backend    # FastAPI filesystem API on :8000
+make agent      # AI agent on :8001
 ```
-
-The Electron main process spawns the FastAPI backend and loads the Vite build
-from `frontend/dist/index.html`.
 
 ## Filesystem API
 
@@ -64,5 +75,5 @@ The backend exposes the following endpoints:
 make clean
 ```
 
-Removes `frontend/dist`, `frontend/node_modules`, `backend/.venv`, and
-`backend/__pycache__`.
+Removes `dist/` and `node_modules/` from `frontend/`, and the `.venv/` and
+`__pycache__/` directories from `backend/` and `ai-agent/`.
