@@ -1,5 +1,5 @@
-from apply_safely import CodePatch
-from patcher import Patcher
+from p3_beta.apply_safely import CodePatch
+from p3_beta.patcher import Patcher
 
 mok_project_root = "/home/afadouac/Desktop/inception_of_context"
 

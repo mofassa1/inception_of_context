@@ -1,7 +1,7 @@
 import time
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from utils import is_binary
+from p1.utils import is_binary
 import sys
 
 class OnMyWatch:
