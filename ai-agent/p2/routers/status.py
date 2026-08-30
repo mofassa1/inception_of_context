@@ -17,6 +17,7 @@
         # "files": [{"name": "README.md", "chunks": 1}, ...],   done
         # }
 
+import os
 from fastapi import APIRouter, HTTPException
 from p2.store import vector_store as store
 from p2.llm_object import llm_manager
@@ -38,7 +39,7 @@ def get_status():
             "chroma_path": chroma_path,
             "ask_model": ask_model_name,
             "code_model": code_model_name,
-            "ollama_backend": "http://ollama:11434/justTesting",  # You can modify this if needed
+            "ollama_backend": os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
             "files": files,
             
             # Add other status information as needed

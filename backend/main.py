@@ -1,9 +1,13 @@
+import os
 import shutil
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+load_dotenv()
 
 app = FastAPI(
     title="Mini IDE Backend",
@@ -19,12 +23,14 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-IGNORED_NAMES = {"node_modules", ".git", "__pycache__"}
+IGNORED_NAMES = set(
+    os.getenv("IGNORED_NAMES", "node_modules,.git,__pycache__").split(",")
+)
 
 
 def _resolve(raw: str) -> Path:
@@ -124,3 +130,13 @@ def rename_entry(body: RenameBody):
         raise HTTPException(409, f"already exists: {dst}")
     src.rename(dst)
     return {"path": str(dst), "is_dir": dst.is_dir()}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host=os.getenv("HOST", "127.0.0.1"),
+        port=int(os.getenv("PORT", "8000")),
+    )

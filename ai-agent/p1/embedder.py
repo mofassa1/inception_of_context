@@ -8,8 +8,8 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 class Embedder:
     def __init__(
         self,
-        model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
-        cache_folder: str = os.path.expanduser("~/.cache/huggingface"),
+        model_name: str = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+        cache_folder: str = os.path.expanduser(os.getenv("HF_CACHE", "~/.cache/huggingface")),
     ):
         self.model_name = model_name
         self.cache_folder = cache_folder

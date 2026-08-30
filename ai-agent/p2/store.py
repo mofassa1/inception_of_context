@@ -1,7 +1,8 @@
+import os
+
 from p1.db import VectorStore
 
-
 vector_store = VectorStore(
-    "./chroma_db",
-    collection_name="codebase"
+    os.getenv("CHROMA_PATH", "./chroma_db"),
+    collection_name=os.getenv("CHROMA_COLLECTION", "codebase"),
 )

@@ -1,4 +1,6 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 from monitor import OnMyWatch
 from chunker import Chunker
 from embedder import Embedder
@@ -56,7 +58,7 @@ if __name__ == "__main__":
     chroma_path : str = ""
     try:
         target_path = to_abs_path(sys.argv[1])
-        chroma_path = to_abs_path("../chroma_db")
+        chroma_path = to_abs_path(os.getenv("CHROMA_PATH", "../chroma_db"))
         g_infos.set_target_path(target_path)
         g_infos.set_chroma_path(chroma_path)
     except ValueError as e:

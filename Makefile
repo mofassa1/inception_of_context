@@ -13,7 +13,7 @@ build:
 
 app: install-frontend install-backend build
 	-fuser -k 8000/tcp
-	cd backend && uv run uvicorn main:app --host 127.0.0.1 --port 8000 &
+	cd backend && uv run python main.py &
 	cd frontend && npx electron .
 	-fuser -k 8000/tcp
 
@@ -22,7 +22,7 @@ frontend: install-frontend build
 
 backend: install-backend
 	-fuser -k 8000/tcp
-	cd backend && uv run uvicorn main:app --host 127.0.0.1 --port 8000
+	cd backend && uv run python main.py
 
 clean:
 	rm -rf frontend/dist frontend/node_modules backend/.venv backend/__pycache__
