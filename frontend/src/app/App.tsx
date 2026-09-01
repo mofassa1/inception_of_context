@@ -5,6 +5,8 @@ import { ActivityBar } from "./components/ActivityBar.js";
 import { TitleBar } from "./components/TitleBar.js";
 import { Welcome } from "./components/Welcome.js";
 import { ChatPanel } from "./components/chat/ChatPanel.js";
+import { OverviewPanel } from "./components/overview/OverviewPanel.js";
+import type { WorkspaceView } from "./components/ViewSwitch.js";
 import { Sidebar } from "./components/sidebar/Sidebar.js";
 import { Editor } from "./components/editor/Editor.js";
 import { StatusBar } from "./components/editor/StatusBar.js";
@@ -31,6 +33,7 @@ export function App() {
   const [root, setRoot] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatWidth, setChatWidth] = useState(380);
+  const [view, setView] = useState<WorkspaceView>("editor");
   const tabs = useTabs();
 
   const folderName = root ? root.split("/").pop() || root : null;
@@ -68,11 +71,18 @@ export function App() {
 
   return (
     <>
-      <TitleBar label={folderName ?? APP_NAME} title={root ?? undefined} />
+      <TitleBar
+        label={folderName ?? APP_NAME}
+        title={root ?? undefined}
+        showSwitch={!!root}
+        view={view}
+        onViewChange={setView}
+      />
       {!root ? (
         <Welcome onOpen={openFolder} />
       ) : (
-        <div className="ide">
+        <>
+        <div className="ide" hidden={view !== "editor"}>
           <Sidebar
             root={root}
             onOpenFile={tabs.openFile}
@@ -106,6 +116,8 @@ export function App() {
           />
           <ActivityBar chatOpen={chatOpen} onToggleChat={() => setChatOpen((v) => !v)} />
         </div>
+        {view === "overview" && <OverviewPanel root={root} />}
+        </>
       )}
     </>
   );

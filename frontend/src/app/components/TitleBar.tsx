@@ -1,7 +1,20 @@
 import { useEffect, useState } from "react";
 import { Copy, Minus, Square, SquareTerminal, X } from "lucide-react";
+import { ViewSwitch, type WorkspaceView } from "./ViewSwitch.js";
 
-export function TitleBar({ label, title }: { label: string; title?: string }) {
+export function TitleBar({
+  label,
+  title,
+  view,
+  onViewChange,
+  showSwitch = false,
+}: {
+  label: string;
+  title?: string;
+  view?: WorkspaceView;
+  onViewChange?: (view: WorkspaceView) => void;
+  showSwitch?: boolean;
+}) {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -21,6 +34,13 @@ export function TitleBar({ label, title }: { label: string; title?: string }) {
         <SquareTerminal className="titlebar-mark" size={15} />
         <span className="titlebar-label">{label}</span>
       </div>
+
+      {showSwitch && view && onViewChange && (
+        <div className="titlebar-center">
+          <ViewSwitch value={view} onChange={onViewChange} />
+        </div>
+      )}
+
       <div className="titlebar-buttons">
         <button
           className="titlebar-btn"
