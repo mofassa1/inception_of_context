@@ -60,7 +60,32 @@ export function mockOverview(root: string): OverviewData {
   };
 }
 
-/** Stub — swap the body for a real request once the endpoint lands. */
+
+const BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
+
+export type Entry = {
+name: string;
+path: string;
+is_dir: boolean;
+};
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(BASE + path, init);
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? `${res.status} ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
 export async function fetchOverview(root: string): Promise<OverviewData> {
-  return mockOverview(root);
+  return req<OverviewData>(
+  `/api/agent/status?root=${encodeURIComponent(root)}`
+  );
+}
+
+export async function Overview(root: string): Promise<OverviewData> {
+  return fetchOverview(root);
 }

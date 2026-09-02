@@ -1,14 +1,16 @@
 import os
 import shutil
 from pathlib import Path
-
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-
+import subprocess
+import sys
+from pathlib import Path
+from pydantic import BaseModel
 load_dotenv()
 
 AGENT_URL = os.getenv("AGENT_URL", "http://127.0.0.1:8001").rstrip("/")
@@ -38,16 +40,94 @@ IGNORED_NAMES = set(
 )
 
 
+class WriteBody(BaseModel):
+    path: str
+    content: str
+
+class RenameBody(BaseModel):
+    path: str
+    new_path: str
+
+class AgentIndexBody(BaseModel):
+    path: str
+
+
+class AgentAskBody(BaseModel):
+    query: str
+    k: int = 5
+
+class CreateBody(BaseModel):
+    path: str
+    is_dir: bool = False
+
+
+class IndexManager:
+    def __init__(self):
+        self.process: subprocess.Popen | None = None
+
+    def start(self, target_dir: str) -> None:
+        if self.is_running():
+            raise RuntimeError("Indexer is already running")
+
+        project_root = Path(__file__).resolve().parents[1]
+
+        ai_agent_dir = project_root / "ai-agent"
+        python = ai_agent_dir / "p1" / ".venv" / "bin" / "python"
+
+        print("*" * 50)
+        print(f"Python: {python}")
+        print(f"Working directory: {ai_agent_dir}")
+        print(f"Target directory: {target_dir}")
+        print("*" * 50)
+
+        self.process = subprocess.Popen(
+            [
+                str(python),
+                "-m",
+                "p1.index",
+                target_dir,
+            ],
+            cwd=str(ai_agent_dir),
+        )
+
+    def stop(self) -> None:
+        if self.process is None:
+            return
+
+        if self.is_running():
+            self.process.terminate()
+            self.process.wait()
+
+        self.process = None
+
+    def is_running(self) -> bool:
+        return (
+            self.process is not None
+            and self.process.poll() is None
+        )
+index_manager = IndexManager()
+
+def launch_indexer(target_dir: str) -> None:
+    index_manager.start(target_dir)
+
 def _resolve(raw: str) -> Path:
     if not raw:
         raise HTTPException(400, "path is required")
     return Path(raw).expanduser().resolve()
 
 
+
 @app.get("/", tags=["Health"], summary="Health check")
 def hello():
     return "hello"
 
+@app.get("/indexer/start", tags=["Agent"], summary="Start the indexer")
+def start_indexer(body: str):
+    try:
+        launch_indexer(body)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False}
 
 @app.get("/api/fs/list", tags=["Filesystem"], summary="List directory entries")
 def list_dir(path: str):
@@ -75,9 +155,7 @@ def read_file(path: str):
     return {"path": str(p), "content": content}
 
 
-class WriteBody(BaseModel):
-    path: str
-    content: str
+
 
 
 @app.put("/api/fs/write", tags=["Filesystem"], summary="Write content to a file")
@@ -89,9 +167,6 @@ def write_file(body: WriteBody):
     return {"ok": True}
 
 
-class CreateBody(BaseModel):
-    path: str
-    is_dir: bool = False
 
 
 @app.post("/api/fs/create", tags=["Filesystem"], summary="Create a file or directory")
@@ -120,10 +195,6 @@ def delete_entry(path: str):
     return {"ok": True}
 
 
-class RenameBody(BaseModel):
-    path: str
-    new_path: str
-
 
 @app.post("/api/fs/rename", tags=["Filesystem"], summary="Rename a file or directory")
 def rename_entry(body: RenameBody):
@@ -137,13 +208,6 @@ def rename_entry(body: RenameBody):
     return {"path": str(dst), "is_dir": dst.is_dir()}
 
 
-class AgentIndexBody(BaseModel):
-    path: str
-
-
-class AgentAskBody(BaseModel):
-    query: str
-    k: int = 5
 
 
 async def _agent_request(method: str, path: str, json: dict | None = None):
@@ -154,6 +218,9 @@ async def _agent_request(method: str, path: str, json: dict | None = None):
         raise HTTPException(502, f"agent service unavailable: {exc}") from exc
     if res.status_code >= 400:
         raise HTTPException(res.status_code, res.text)
+    print("+" * 20)
+    print("Agent request called:", method, path, json)
+    print("+" * 20)
     return res.json()
 
 

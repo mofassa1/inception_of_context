@@ -1,6 +1,6 @@
 import os
 from langchain_huggingface import HuggingFaceEmbeddings
-from p1.general_infos_object import g_infos
+from .general_infos_object import g_infos
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")

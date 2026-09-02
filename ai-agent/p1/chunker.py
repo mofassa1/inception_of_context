@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import ast
 import re
 from matplotlib import lines
-from p1.general_infos_object import g_infos
+# from .general_infos_object import g_infos
 
 @dataclass
 class Chunk:
@@ -19,8 +19,11 @@ class Chunk:
 
 FUNC_PATTERN = re.compile(r'^\s*(def|function|func|fn)\s+(\w+)', re.MULTILINE)
 
+import hashlib
 
-from p1.hashing import hash_chunk
+def hash_chunk(content: str) -> str:    
+    return hashlib.sha256(content.rstrip().encode("utf-8")).hexdigest()
+
 
 class Chunker:
     def chunk_python_file(self, filepath: str, source: str) -> list[Chunk]:
