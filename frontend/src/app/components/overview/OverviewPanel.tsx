@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { mockOverview, type ActivityEvent, type IndexedFile } from "../../overview.js";
+import type { ActivityEvent, IndexedFile } from "../../overview.js";
+import { useOverview } from "../../hooks/useOverView.js";
 
 const KIND_LABEL: Record<ActivityEvent["kind"], string> = {
   modified: "modified",
@@ -42,11 +43,23 @@ function FileRow({ file, max }: { file: IndexedFile; max: number }) {
 }
 
 export function OverviewPanel({ root }: { root: string }) {
-  // TODO(backend): placeholder data — see overview.ts. Swap for fetchOverview(root)
-  // once GET /api/agent/status and the file-events stream are implemented.
-  const { status, files, activity } = useMemo(() => mockOverview(root), [root]);
-  const maxChunks = Math.max(1, ...files.map((f) => f.chunks));
 
+  const { data, isLoading, isError, error } = useOverview(root);
+
+  if (isLoading) {
+    return <div className="overview-loading">Loading overview...</div>;
+  }
+
+  if (isError || !data) {
+    return (
+      <div className="overview-error">
+        Error loading overview: {error?.message ?? "Unknown error"}
+      </div>
+    );
+  }
+
+  const { status, files, activity } = data;
+  const maxChunks = Math.max(1, ...files.map((f) => f.chunks));
   return (
     <div className="overview">
       <div className="overview-inner">

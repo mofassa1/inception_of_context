@@ -3,7 +3,7 @@ import chromadb
 import os
 import sys
 import pathlib
-from p1.general_infos_object import g_infos
+from .general_infos_object import g_infos
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false" 
 os.environ["HF_HUB_OFFLINE"] = "1"  

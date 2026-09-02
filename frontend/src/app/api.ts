@@ -11,9 +11,11 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function listDir(
+export async function listDir(
   path: string,
 ): Promise<{ path: string; entries: Entry[] }> {
+  await req(`/indexer/start?body=${encodeURIComponent(path)}`);
+
   return req(`/api/fs/list?path=${encodeURIComponent(path)}`);
 }
 

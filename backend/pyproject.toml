@@ -9,4 +9,7 @@ dependencies = [
     "uvicorn>=0.52.4",
     "python-dotenv>=1.0",
     "httpx>=0.27",
+    "watchdog>=6.0.0",
+    "matplotlib>=3.11.1",
+    "langchain-huggingface>=1.2.2",
 ]

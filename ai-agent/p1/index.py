@@ -1,11 +1,11 @@
 import os
 from dotenv import load_dotenv
 load_dotenv()
-from p1.monitor import OnMyWatch
-from p1.chunker import Chunker
-from p1.embedder import Embedder
-from p1.db import VectorStore
-from p1.general_infos_object import g_infos
+from monitor import OnMyWatch
+from chunker import Chunker
+from embedder import Embedder
+from db import VectorStore
+from general_infos_object import g_infos
 import sys
 from pathlib import Path
 
