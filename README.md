@@ -34,8 +34,8 @@ The app is three connected services:
 make install
 ```
 
-Installs all three services: `npm install` in `frontend/`, `uv sync` in
-`backend/`, and a `uv` venv with `requirements.txt` in `ai-agent/`.
+Installs all three services: `npm install` in `frontend/`, and `uv sync` in
+both `backend/` and `ai-agent/`.
 
 ## Usage
 

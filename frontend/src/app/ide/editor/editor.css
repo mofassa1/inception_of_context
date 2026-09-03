@@ -1,0 +1,93 @@
+.tabbar {
+  flex-shrink: 0;
+  display: flex;
+  overflow-x: auto;
+  background: var(--chrome-bg);
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  height: 35px;
+  padding: 0 10px 0 12px;
+  border-right: 1px solid var(--border);
+  border-top: 1px solid transparent;
+  background: var(--chrome-bg);
+  color: var(--fg);
+  font: 13px var(--font-ui);
+  cursor: pointer;
+}
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--fg-dim);
+}
+.tab-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg-strong);
+}
+.tab:hover {
+  color: var(--fg);
+}
+.tab.active {
+  background: var(--editor-bg);
+  color: var(--fg-strong);
+  border-top-color: var(--tab-active-top);
+}
+.tab.active .tab-close {
+  color: var(--fg);
+}
+
+.editor-host,
+.editor-empty {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--editor-bg);
+}
+.editor-host .cm-editor {
+  height: 100%;
+}
+
+.statusline {
+  flex-shrink: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  background: var(--chrome-bg);
+  border-top: 1px solid var(--border);
+  font: 12px var(--font-ui);
+  color: var(--fg-status);
+}
+.status-word {
+  font-weight: 600;
+}
+.status-saved {
+  color: var(--ok);
+}
+.status-saving {
+  color: var(--info);
+}
+.status-error {
+  color: var(--danger);
+}
+.status-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

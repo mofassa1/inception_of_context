@@ -1,122 +1,84 @@
 import { useEffect, useRef, useState } from "react";
-import { chooseFolder } from "./api.js";
-import { addRecentFolder } from "./recentFolders.js";
-import { ActivityBar } from "./components/ActivityBar.js";
-import { TitleBar } from "./components/TitleBar.js";
-import { Welcome } from "./components/Welcome.js";
-import { ChatPanel } from "./components/chat/ChatPanel.js";
-import { OverviewPanel } from "./components/overview/OverviewPanel.js";
-import type { WorkspaceView } from "./components/ViewSwitch.js";
-import { Sidebar } from "./components/sidebar/Sidebar.js";
-import { Editor } from "./components/editor/Editor.js";
-import { StatusBar } from "./components/editor/StatusBar.js";
-import { Tabs } from "./components/editor/Tabs.js";
-import { useTabs } from "./useTabs.js";
-
-declare global {
-  interface Window {
-    ide?: {
-      pickFolder(): Promise<string | null>;
-      minimize(): void;
-      toggleMaximize(): void;
-      close(): void;
-      isMaximized(): Promise<boolean>;
-      onMaximizeChange(cb: (value: boolean) => void): () => void;
-      onMenu(cb: (action: string) => void): () => void;
-    };
-  }
-}
-
-const APP_NAME = "not vscode";
+import { TitleBar } from "@/shared/components/TitleBar";
+import { Welcome } from "@/shared/components/Welcome";
+import { APP_NAME } from "@/shared/constants/config";
+import { useChooseFolder } from "@/shared/hooks/useChooseFolder";
+import { useIdeMenu } from "@/shared/hooks/useIdeMenu";
+import { getBaseName } from "@/shared/lib/path";
+import { addRecentFolder } from "@/shared/lib/recentFolders";
+import type { WorkspaceView } from "@/shared/types/view";
+import { IdeView } from "./ide/IdeView";
+import { useTabs } from "./ide/editor/hooks/useTabs";
+import { OverviewPanel } from "./overview/OverviewPanel";
 
 export function App() {
   const [root, setRoot] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatWidth, setChatWidth] = useState(380);
   const [view, setView] = useState<WorkspaceView>("editor");
+
   const tabs = useTabs();
+  const { chooseFolder } = useChooseFolder();
 
-  const folderName = root ? root.split("/").pop() || root : null;
-  const activeName = tabs.activeTab?.path.split("/").pop() ?? null;
+  const folderName = root ? getBaseName(root) : null;
+  const activeFileName = tabs.activeTab ? getBaseName(tabs.activeTab.path) : null;
 
-  const closeAllTabs = useRef(tabs.closeAll);
-  closeAllTabs.current = tabs.closeAll;
+  const closeAllTabsRef = useRef(tabs.closeAllTabs);
+  closeAllTabsRef.current = tabs.closeAllTabs;
 
-  function openFolder(path: string) {
-    addRecentFolder(path);
-    setRoot(path);
+  function openFolder(folderPath: string) {
+    addRecentFolder(folderPath);
+    setRoot(folderPath);
   }
 
-  useEffect(() => {
-    document.title = [activeName, folderName, APP_NAME].filter(Boolean).join(" — ");
-  }, [activeName, folderName]);
+  async function pickFolderFromMenu() {
+    try {
+      const folderPath = await chooseFolder();
+      if (folderPath) openFolder(folderPath);
+    } catch (error) {
+      alert("Couldn't open folder: " + (error as Error).message);
+    }
+  }
+
+  function closeFolder() {
+    setRoot(null);
+    closeAllTabsRef.current();
+  }
+
+  useIdeMenu((action) => {
+    if (action === "open-folder") pickFolderFromMenu();
+    else if (action === "close-folder") closeFolder();
+    else if (action === "toggle-chat") setChatOpen((open) => !open);
+  });
 
   useEffect(() => {
-    return window.ide?.onMenu(async (action) => {
-      if (action === "open-folder") {
-        try {
-          const picked = await chooseFolder();
-          if (picked) openFolder(picked);
-        } catch (err) {
-          alert("Couldn't open folder: " + (err as Error).message);
-        }
-      } else if (action === "close-folder") {
-        setRoot(null);
-        closeAllTabs.current();
-      } else if (action === "toggle-chat") {
-        setChatOpen((v) => !v);
-      }
-    });
-  }, []);
+    document.title = [activeFileName, folderName, APP_NAME]
+      .filter(Boolean)
+      .join(" — ");
+  }, [activeFileName, folderName]);
 
   return (
     <>
       <TitleBar
         label={folderName ?? APP_NAME}
         title={root ?? undefined}
-        showSwitch={!!root}
+        showSwitch={Boolean(root)}
         view={view}
         onViewChange={setView}
       />
+
       {!root ? (
         <Welcome onOpen={openFolder} />
       ) : (
         <>
-        <div className="ide" hidden={view !== "editor"}>
-          <Sidebar
+          <IdeView
             root={root}
-            onOpenFile={tabs.openFile}
-            onPathRemoved={tabs.handleTreeRemoved}
-            onPathRenamed={tabs.handleTreeRenamed}
+            hidden={view !== "editor"}
+            chatOpen={chatOpen}
+            onToggleChat={() => setChatOpen((open) => !open)}
+            onCloseChat={() => setChatOpen(false)}
+            tabs={tabs}
           />
-          <div className="main">
-            <Tabs
-              tabs={tabs.tabs}
-              activePath={tabs.active}
-              onSelect={tabs.switchTab}
-              onClose={tabs.closeTab}
-            />
-            {tabs.activeTab ? (
-              <Editor
-                path={tabs.activeTab.path}
-                currentState={tabs.activeTab.state}
-                onChange={tabs.onDocChange}
-              />
-            ) : (
-              <div className="editor-empty" />
-            )}
-            <StatusBar tab={tabs.activeTab} />
-          </div>
-          <ChatPanel
-            root={root}
-            open={chatOpen}
-            onClose={() => setChatOpen(false)}
-            width={chatWidth}
-            onResize={setChatWidth}
-          />
-          <ActivityBar chatOpen={chatOpen} onToggleChat={() => setChatOpen((v) => !v)} />
-        </div>
-        {view === "overview" && <OverviewPanel root={root} />}
+          {view === "overview" && <OverviewPanel root={root} />}
         </>
       )}
     </>

@@ -22,9 +22,12 @@ RAG + coding-agent service (vendored from the `main` branch).
 ## Setup
 
 ```
-python -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 ```
+
+Dependencies are declared in `pyproject.toml`; `uv sync` creates `.venv/` and
+locks them in `uv.lock`. `torch` is pinned to the CPU wheel index on Linux to
+avoid pulling the CUDA runtime.
 
 `.env` is committed with working defaults; edit it if your Ollama host, models,
 cache dir, or Chroma path differ.
@@ -37,7 +40,7 @@ All commands run from this directory (`ai-agent/`), which puts `p1` / `p2` /
 Serve the API (`make agent` does this):
 
 ```
-uvicorn serve:app --host 127.0.0.1 --port 8001
+uv run uvicorn serve:app --host 127.0.0.1 --port 8001
 ```
 
 The IDE backend proxies this service at `/api/agent/*` (see `backend/main.py`),
@@ -46,7 +49,7 @@ so the desktop app only talks to `:8000`.
 Index a project (also starts a watcher for incremental re-index):
 
 ```
-python -m p1.index /path/to/project
+uv run python -m p1.index /path/to/project
 ```
 
 ## Config

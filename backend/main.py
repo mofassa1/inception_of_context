@@ -72,7 +72,7 @@ class IndexManager:
         project_root = Path(__file__).resolve().parents[1]
 
         ai_agent_dir = project_root / "ai-agent"
-        python = ai_agent_dir / "p1" / ".venv" / "bin" / "python"
+        python = ai_agent_dir / ".venv" / "bin" / "python"
 
         print("*" * 50)
         print(f"Python: {python}")

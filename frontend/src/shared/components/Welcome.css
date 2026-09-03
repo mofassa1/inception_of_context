@@ -1,0 +1,191 @@
+.welcome {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--editor-bg);
+}
+.welcome::before {
+  content: "";
+  position: absolute;
+  top: -22%;
+  left: 50%;
+  width: 640px;
+  height: 640px;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    circle,
+    rgba(77, 120, 204, 0.2),
+    transparent 68%
+  );
+  pointer-events: none;
+}
+
+.welcome-inner {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: welcome-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes welcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.welcome-mark {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  color: var(--accent);
+  background: linear-gradient(
+    160deg,
+    rgba(77, 120, 204, 0.24),
+    rgba(77, 120, 204, 0.07)
+  );
+  border: 1px solid rgba(77, 120, 204, 0.32);
+  box-shadow: 0 10px 34px -14px rgba(77, 120, 204, 0.6);
+}
+.welcome-title {
+  margin: 20px 0 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--fg-strong);
+}
+.welcome-tagline {
+  margin: 9px 0 26px;
+  max-width: 330px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--fg-dim);
+}
+
+.welcome-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font: 500 13.5px var(--font-ui);
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    transform 0.1s ease;
+}
+.welcome-open:hover:not([disabled]) {
+  background: #5a83d1;
+}
+.welcome-open:active:not([disabled]) {
+  transform: translateY(1px);
+}
+.welcome-open[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.welcome-open kbd {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.22);
+  font: 11px var(--font-mono);
+  color: rgba(255, 255, 255, 0.85);
+}
+.welcome-error {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.welcome-recent {
+  margin-top: 32px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.welcome-recent-label {
+  align-self: flex-start;
+  margin: 0 0 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.welcome-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.welcome-recent-item:hover:not([disabled]) {
+  background: var(--list-hover);
+  border-color: var(--border);
+}
+.welcome-recent-item[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.welcome-recent-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.welcome-recent-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.welcome-recent-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-strong);
+}
+.welcome-recent-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+.welcome-recent-arrow {
+  flex-shrink: 0;
+  color: var(--fg-dim);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.welcome-recent-item:hover:not([disabled]) .welcome-recent-arrow {
+  opacity: 1;
+}
