@@ -91,7 +91,7 @@ tests:
 
 clean:
 	rm -rf .venv .pytest_cache p2/dashboard/node_modules p2/dashboard/dist
-	find . -path ./_backup -prune -o -name __pycache__ -type d -prune -exec rm -rf {} +
+	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 
 fclean: clean
 	rm -rf chroma_db sessions.sqlite3
