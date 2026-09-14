@@ -1,0 +1,31 @@
+.view-switch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+}
+.view-switch-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-dim);
+  font: 500 11.5px var(--font-ui);
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+.view-switch-opt:hover {
+  color: var(--fg);
+}
+.view-switch-opt.active {
+  background: var(--accent);
+  color: #fff;
+}

@@ -1,0 +1,152 @@
+.tabbar {
+  flex-shrink: 0;
+  display: flex;
+  overflow-x: auto;
+  background: var(--chrome-bg);
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  height: 35px;
+  padding: 0 10px 0 12px;
+  border-right: 1px solid var(--border);
+  border-top: 1px solid transparent;
+  background: var(--chrome-bg);
+  color: var(--fg);
+  font: 13px var(--font-ui);
+  cursor: pointer;
+}
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--fg-dim);
+}
+.tab-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg-strong);
+}
+.tab:hover {
+  color: var(--fg);
+}
+.tab.active {
+  background: var(--editor-bg);
+  color: var(--fg-strong);
+  border-top-color: var(--tab-active-top);
+}
+.tab.active .tab-close {
+  color: var(--fg);
+}
+
+.editor-host,
+.editor-empty {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--editor-bg);
+}
+.editor-host .cm-editor {
+  height: 100%;
+}
+
+.statusline {
+  flex-shrink: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  background: var(--chrome-bg);
+  border-top: 1px solid var(--border);
+  font: 12px var(--font-ui);
+  color: var(--fg-status);
+}
+.status-word {
+  font-weight: 600;
+}
+.status-saved {
+  color: var(--ok);
+}
+.status-saving {
+  color: var(--info);
+}
+.status-error {
+  color: var(--danger);
+}
+.status-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cm-chunk-band {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 16px 1px 10px;
+  margin-top: 2px;
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--chunk-hue, var(--info));
+  background: color-mix(in srgb, var(--chunk-hue, var(--info)) 10%, transparent);
+  border-top: 1px solid
+    color-mix(in srgb, var(--chunk-hue, var(--info)) 45%, transparent);
+  user-select: none;
+}
+
+.cm-chunk-band-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cm-chunk-line {
+  background: rgba(97, 175, 239, 0.03);
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.status-indexing {
+  color: var(--info);
+  font-size: 11px;
+}
+
+.status-chunks {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.status-chunks:hover {
+  color: var(--fg);
+  background: var(--list-hover);
+}
+
+.status-chunks.active {
+  color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 35%, transparent);
+}

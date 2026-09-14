@@ -1,0 +1,66 @@
+services:
+  # Ollama runs in the stack rather than on the host. A container cannot be
+  # relied on to reach a host daemon — rootless Docker is commonly configured
+  # with --disable-host-loopback, which blocks it outright — and the subject
+  # requires the whole thing to run locally and reproducibly. Point
+  # IOC_OLLAMA_HOST at a host instance instead if yours is reachable.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ioc-ollama
+    ports:
+      - "127.0.0.1:11435:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      target: api
+    container_name: ioc-api
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      # These read IOC_* rather than the bare names on purpose. Compose performs
+      # variable substitution using the repository's own .env, which holds the
+      # values for running on the host — letting OLLAMA_HOST through from there
+      # would point this container at its own loopback.
+      OLLAMA_HOST: ${IOC_OLLAMA_HOST:-http://ollama:11434}
+      IOC_DATA_DIR: /data
+      # Indexed and watched on startup. The models come from p2/llm_object.py.
+      TARGET_PROJECT: ${TARGET_PROJECT:-/app/demo}
+      # The host directories `make up` mounts (docker-compose.host.yml), so an
+      # error can say a folder is outside them instead of "not a directory".
+      HOST_ROOTS: ${HOST_ROOTS:-}
+      CORS_ORIGINS: "*"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      # p2/store.py opens ./chroma_db from the working directory (/app),
+      # so the index lives in its own volume there and survives `make down`.
+      - ioc-chroma:/app/chroma_db
+      - ioc-data:/data
+      # The target project is mounted at the SAME absolute path it has on the
+      # host. The desktop app runs outside the container but browses files
+      # through this API, so a path it shows the user has to resolve to the same
+      # file in here. Mounting at /workspace instead would 404 every open.
+      # `make up` also mounts the directories holding the user's other folders
+      # through docker-compose.host.yml, so any of them can be opened.
+      - ${TARGET_PROJECT:-./demo}:${TARGET_PROJECT:-/app/demo}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+volumes:
+  ioc-chroma:
+  ioc-data:
+  ollama-models:

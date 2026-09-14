@@ -1,0 +1,11 @@
+.git
+.data
+.venv
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+.claude
+en.subject.pdf
+screenshot.png

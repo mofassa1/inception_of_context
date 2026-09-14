@@ -1,0 +1,239 @@
+.overview {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--chrome-bg);
+}
+.overview-inner {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 32px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.overview-loading,
+.overview-error {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: var(--chrome-bg);
+  font-size: 13px;
+  text-align: center;
+}
+
+.overview-loading {
+  color: var(--fg-dim);
+}
+
+.overview-error {
+  color: var(--danger);
+}
+
+.ov-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ov-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fg-strong);
+}
+.ov-subtitle {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+.ov-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(152, 195, 121, 0.08);
+  font-size: 11px;
+  color: var(--ok);
+}
+.ov-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(152, 195, 121, 0.18);
+}
+
+.ov-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px 18px;
+  background: rgba(255, 255, 255, 0.015);
+}
+.ov-panel-title {
+  margin-bottom: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.ov-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 10px;
+}
+.ov-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--chrome-bg);
+}
+.ov-stat.hl {
+  border-color: rgba(77, 120, 204, 0.55);
+}
+.ov-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.ov-stat-value {
+  font: 12.5px / 1.45 var(--font-mono);
+  color: var(--fg-strong);
+  overflow-wrap: anywhere;
+}
+.ov-stat.hl .ov-stat-value {
+  font-size: 16px;
+  color: var(--info);
+}
+
+.ov-files {
+  display: flex;
+  flex-direction: column;
+}
+.ov-file {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.ov-file:last-child {
+  border-bottom: 0;
+}
+.ov-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--fg);
+}
+.ov-file-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.ov-file-track {
+  flex-shrink: 0;
+  width: 96px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.ov-file-bar {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--info);
+}
+
+.ov-empty {
+  margin: 0;
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--fg-dim);
+}
+
+.ov-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ov-event {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 2px;
+  font-size: 12px;
+}
+.ov-event-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fg-dim);
+}
+.ov-event-dot.ov-modified {
+  background: var(--info);
+}
+.ov-event-dot.ov-created {
+  background: var(--ok);
+}
+.ov-event-dot.ov-deleted {
+  background: var(--danger);
+}
+.ov-event-kind {
+  flex-shrink: 0;
+  width: 62px;
+  color: var(--fg-dim);
+}
+.ov-event-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--fg);
+}
+
+.ov-live.connected .ov-live-dot {
+  background: var(--ok);
+}
+
+.ov-event-chunks {
+  margin-left: auto;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.ov-event-dot.ov-indexed,
+.ov-event-dot.ov-patched {
+  background: var(--info);
+}
+
+.ov-event-dot.ov-ignored {
+  background: var(--fg-dim);
+}
+
+.ov-event-dot.ov-error {
+  background: var(--danger);
+}

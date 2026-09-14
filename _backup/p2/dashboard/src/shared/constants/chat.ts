@@ -1,0 +1,22 @@
+export const CHAT_ROUTING = {
+  CHANGE_VERBS: [
+    "add",
+    "append",
+    "change",
+    "create",
+    "delete",
+    "fix",
+    "implement",
+    "insert",
+    "make",
+    "modify",
+    "move",
+    "refactor",
+    "remove",
+    "rename",
+    "replace",
+    "update",
+    "write",
+  ],
+  LEADING_WORDS: ["no", "yes", "ok", "okay", "now", "please", "pls", "can you", "could you"],
+} as const;

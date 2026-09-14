@@ -1,0 +1,212 @@
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--chrome-bg);
+  border-right: 1px solid var(--border);
+}
+.sidebar-head {
+  position: sticky;
+  top: 0;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  background: var(--chrome-bg);
+  color: var(--fg-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+.sidebar-head-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-head-actions {
+  display: flex;
+  gap: 2px;
+  margin-right: -8px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.sidebar:hover .sidebar-head-actions,
+.sidebar-head-actions:focus-within {
+  opacity: 1;
+}
+.sidebar-action {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+}
+.sidebar-action:hover {
+  background: var(--list-hover);
+  color: var(--fg-strong);
+}
+
+.tree {
+  flex: 1;
+  min-height: 120px;
+  padding: 2px 0 8px;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding-right: 12px;
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.tree-row:hover {
+  background: var(--list-hover);
+}
+
+.tree-caret {
+  display: block;
+  flex-shrink: 0;
+  color: var(--fg);
+  opacity: 0.75;
+  transition: transform 0.1s linear;
+}
+.tree-dir.open .tree-caret {
+  transform: rotate(90deg);
+}
+
+.tree-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-error {
+  padding: 6px 20px;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.tree-name-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--focus);
+  border-radius: 2px;
+  padding: 1px 6px;
+  color: var(--fg-strong);
+  font: 13px var(--font-ui);
+}
+.tree-name-input:focus {
+  outline: 1px solid var(--cursor);
+  outline-offset: -1px;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  background: var(--chrome-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  box-shadow: var(--shadow);
+  padding: 4px;
+  font-size: 13px;
+}
+.context-menu-item {
+  padding: 6px 10px;
+  border-radius: 3px;
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.context-menu-item:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.context-menu-item.danger {
+  color: var(--danger);
+}
+.context-menu-item.danger:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.tree-ignore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-right: 5px;
+  border: 1px solid var(--focus);
+  border-radius: 2px;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.tree-ignore:hover {
+  border-color: var(--fg-dim);
+}
+
+.tree-ignore.ignored {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.tree-row.ignored .tree-name,
+.tree-row.ignored .tree-icon {
+  opacity: 0.42;
+}
+
+.sidebar {
+  position: relative;
+}
+
+.sidebar-resize {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.sidebar-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 1px;
+  height: 100%;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.sidebar-resize:hover::after {
+  background: var(--accent);
+}

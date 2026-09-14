@@ -1,0 +1,6 @@
+# Read by p3 before it applies a patch to this project. The loop runs this
+# command after each attempt; a non-zero exit is fed back to the model as the
+# error to fix, and three failures roll the project back.
+validation:
+  command: python -m pytest -q
+  timeout: 120
