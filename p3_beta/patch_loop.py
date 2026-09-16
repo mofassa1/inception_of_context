@@ -1,85 +1,68 @@
-from apply_safely import CodePatch
-from patcher import Patcher
+from p1.general_infos_object import g_infos
+from p3_beta.patcher import Patcher, SANITY_CHECK_DESCRIPTIONS
 
-mok_project_root = "/home/afadouac/Desktop/inception_of_context"
 
-patcher_instance = Patcher(project_root=mok_project_root)
+def loop(query: str, k: int, target_path: str | None, ignored_paths: list[str]) -> dict:
+    """Attempt to satisfy the query with a patch, up to 3 tries, validating each one."""
+    project_root = g_infos.get_target_path()
+    patcher = Patcher(project_root=project_root, ignored_paths=ignored_paths)
 
-feedback = ""
+    attempts = []
+    feedback = ""
+    rolled_back = False
 
-SANITY_CHECK_DESCRIPTIONS = {
-    0: "The response passed all sanity checks.",
-    
-    1: (
-        "The response is a noop. No code changes are required."
-    ),
-    
-    2: (
-        "The response does not contain any files. "
-        "If the request requires code changes, provide at least one file operation."
-    ),
-    
-    3: (
-        "The response contains more than 3 files. "
-        "Reduce the changes to only the files necessary to satisfy the request."
-    ),
-    
-    4: (
-        "The response contains an invalid file operation. "
-        "Each file operation must be one of: create, modify, delete, or noop."
-    ),
-    
-    5: (
-        "The response attempts to create a file that already exists. "
-        "Use 'modify' instead if the existing file needs to be changed."
-    ),
-    
-    6: (
-        "The response attempts to modify or delete a file that does not exist. "
-        "Only modify or delete existing files."
-    ),
-    
-    7: (
-        "A create or modify operation has missing or invalid content. "
-        "The content must be a non-empty string containing the complete file content."
-    ),
-    
-    8: (
-        "A create or modify operation contains an obvious stub or incomplete implementation. "
-        "Provide a complete implementation instead of placeholders, TODOs, or similar stubs."
-    ),
-    
-    9: (
-        "A modify operation removes more than 60% of the existing file content. "
-        "Preserve the existing implementation and make the smallest change necessary "
-        "to satisfy the request."
-    ),
-}
+    for iteration in range(3):
+        response = patcher.answer_user_query(query, attempt_message=feedback, k=k)
+        sanity_code = patcher.sanity_checker(response)
 
-def loop(query: str):
-    """Continuously prompt the user for a query and answer it using the code model."""
-    for iteration in range(3): 
-        response = patcher_instance.answer_user_query(query, attempt_message=feedback)
-        sanity_result = patcher_instance.sanity_checker(response)
-        
-        if  sanity_result != 0:
-            feedback = SANITY_CHECK_DESCRIPTIONS[sanity_result]
-            continue
-        else:
+        applied = False
+        validation_passed = False
+        validation_output = ""
+
+        if sanity_code == 0:
             try:
-                patcher_instance.create_backup(response, backup_dir="backups")
-                patcher_instance.atomic_replacement(response)
-                patcher_instance.create_new_files(response)
-                patcher_instance.delete_files(response)
-                state, feedback = patcher_instance.launch_tests()
-                if state:
-                    return response
-                else:
-                    feedback = f"Tests failed: {feedback}"
-                    continue
-            except Exception as e:
-                feedback = f"Error applying changes: {e}."
-                continue
-                
-            
+                patcher.create_backup(response, backup_dir="backups")
+                patcher.atomic_replacement(response)
+                applied = True
 
+                validation_passed, validation_output = patcher.launch_tests()
+                if not validation_passed:
+                    feedback = f"Tests failed: {validation_output}"
+                    patcher.restore_backup()
+                    rolled_back = True
+            except Exception as e:
+                feedback = f"Error applying changes: {e}"
+                patcher.restore_backup()
+                rolled_back = True
+        else:
+            feedback = SANITY_CHECK_DESCRIPTIONS[sanity_code]
+
+        attempts.append(
+            {
+                "number": iteration + 1,
+                "summary": response.summary,
+                # "noop" isn't a valid op on the server's side, drop it from the reported files
+                "files": [f.model_dump() for f in response.files if f.op != "noop"],
+                "sanity": {"code": sanity_code, "message": SANITY_CHECK_DESCRIPTIONS[sanity_code]},
+                "applied": applied,
+                "validation_passed": validation_passed,
+                "validation_output": validation_output,
+            }
+        )
+
+        if applied and validation_passed:
+            return {
+                "succeeded": True,
+                "attempts": attempts,
+                "rolled_back": False,
+                "files_touched": sorted({f.path for f in response.files if f.op != "noop"}),
+                "summary": response.summary,
+            }
+
+    return {
+        "succeeded": False,
+        "attempts": attempts,
+        "rolled_back": rolled_back,
+        "files_touched": [],
+        "summary": "patch loop failed after 3 attempts",
+    }

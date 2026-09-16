@@ -59,35 +59,6 @@ async def retrieve_sources(request: RetrieveRequest):
         return relevant_chunks
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-        # >>> FASTAPI HOOK <<<
-        # resp = api.post("/retrieve", json={"query": query, "k": k})
-        # resp.raise_for_status()
-        # sources = resp.json()["sources"]   # [{"file": "...", "line": N, "score": 0.1}, ...]
-
-        # Placeholder sources matching the screenshot:
-# sources = [
-#     {"file": "notes/service.py", "line": 7, "score": 0.10},
-#     {"file": "tests/test_service.py", "line": 28, "score": 0.04},
-#     {"file": "tests/test_service.py", "line": 19, "score": -0.00},
-#     {"file": "main.py", "line": 1, "score": -0.07},
-#     {"file": "notes/service.py", "line": 24, "score": -0.08},
-# ][:k]
-
-##############################################################################################################
-        # >>> FASTAPI HOOK (streaming) <<<
-# Runs in a background thread so it doesn't freeze the UI while streaming.
-# def worker():
-#     with api.stream(
-#         "POST",
-#         "/ask/stream",
-#         json={"query": query, "k": k, "session_id": session_id["value"]},
-#     ) as resp:
-#         for chunk in resp.iter_text():
-#             answer_text.value += chunk
-#             page.update()
-#     # After streaming finishes, fetch sources / session id, e.g. from a
-#     # trailing SSE "event: sources" message or a separate response header.
-# threading.Thread(target=worker, daemon=True).start()
 
 class AskRequest(BaseModel):
     query: str

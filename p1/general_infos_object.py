@@ -5,11 +5,11 @@ class GeneralInfos():
     def __init__(self, 
                  target_path: str = "", 
                  chroma_path: str = "",
-                 collection_name: str = "codebase/test",
+                 collection_name: str = "codebase",
                  embedder_name: str = "all-MiniLM-L6-v2/test",
                  set_code_llm_name: str = "qwen2.5-coder:3b/test",
                  set_llm_name: str = "qwen2.5:3b/test",
-                 ollama_backend: str = "default_backend",
+                 ollama_backend: str = "http://127.0.0.1:8000",
                  target_project: str = "/hello_world"):
         self.target_path: str = target_path
         self.chroma_path: str = chroma_path

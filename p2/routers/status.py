@@ -16,7 +16,7 @@ def get_status():
         code_model_name = llm_manager.get_code_model_name()
         chroma_path = store.get_chroma_path()
         embedder_name  = g_infos.get_embedder_name()
-        target_project = g_infos.get_target_project()
+        target_project = g_infos.get_target_path()
         ollama_backend = g_infos.get_ollama_backend()
         status_data = {
             "chunks_indexed": chunks_indexed ,

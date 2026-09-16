@@ -1,6 +1,6 @@
 import os
 from langchain_huggingface import HuggingFaceEmbeddings
-from general_infos_object import g_infos
+
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
@@ -14,7 +14,13 @@ class Embedder:
         self.model_name = model_name
         self.cache_folder = cache_folder
         self.embeddings = self._init_embeddings()
-        g_infos.set_embedder_name(self.model_name)
+
+    def get_model_name(self) -> str:
+        return self.model_name
+    
+    def set_model_name(self, model_name: str):
+        self.model_name = model_name
+        self.embeddings = self._init_embeddings()
 
     def _is_cached(self) -> bool:
         # crude but effective: check if the model's folder already exists in the cache

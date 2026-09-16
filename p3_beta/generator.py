@@ -4,13 +4,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from p2.llm_manager import CodePatch, PatchFile
 from p2.store import vector_store as store
 
-def build_prompt_template(query: str, file_paths: list[str], context: str) -> str:
-    """Build the prompt template for the code model."""
-    return prompt_template.format(
-        query=query,
-        file_paths="\n".join(file_paths),
-        context=context
-    )
+
 
 prompt_template = """
 You are a coding agent responsible for proposing changes to an existing codebase.
@@ -62,6 +56,14 @@ IMPORTANT:
 - The summary should briefly describe the proposed changes.
 - Each file entry must contain its path, operation, and resulting content when applicable.
 """
+
+def build_prompt_template(query: str, file_paths: list[str], context: str) -> str:
+    """Build the prompt template for the code model."""
+    return prompt_template.format(
+        query=query,
+        file_paths="\n".join(file_paths),
+        context=context
+    )
 
 def generate_code_response(messages: list[BaseMessage]) -> CodePatch:
     """Generate a code response using the code model."""

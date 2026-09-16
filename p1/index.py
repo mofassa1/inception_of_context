@@ -5,6 +5,7 @@ from embedder import Embedder
 from db import VectorStore
 import sys
 from pathlib import Path
+from utils import collection_name_from_path
 
 
 def is_binary(path: str, chunk_size: int = 1024) -> bool:
@@ -63,7 +64,7 @@ if __name__ == "__main__":
     chunker = Chunker()
     embedder = Embedder()
 
-    store = VectorStore(chroma_path=chroma_path, collection_name="codebase")
+    store = VectorStore(chroma_path=chroma_path, collection_name=collection_name_from_path(target_path))
 
     for filepath in walk_target(target_path, chroma_path):
 

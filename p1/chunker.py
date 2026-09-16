@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import ast
 import re
 from matplotlib import lines
-from general_infos_object import g_infos
 
 @dataclass
 class Chunk:
