@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
+
 import httpx
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
@@ -38,14 +39,6 @@ DEFAULT_IGNORED_NAMES = [
     "coverage",
 ]
 
-
-# ---------------------------------------------------------------------------
-# Database
-#
-#   conversations  one folder has many conversations
-#   chats          one conversation has many chats (role, content, mode)
-#   ignore_rules   one conversation has many ignore rules (pattern, is_ignored)
-# ---------------------------------------------------------------------------
 
 
 def open_database():
@@ -1016,6 +1009,7 @@ async def ask(body: AskInputDTO):
 
     return StreamingResponse(answer_lines(), media_type="application/x-ndjson")
 
+import sys
 
 if __name__ == "__main__":
     create_tables()

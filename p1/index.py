@@ -3,7 +3,6 @@ from monitor import OnMyWatch
 from chunker import Chunker
 from embedder import Embedder
 from db import VectorStore
-from general_infos_object import g_infos
 import sys
 from pathlib import Path
 
@@ -57,8 +56,7 @@ if __name__ == "__main__":
     try:
         target_path = to_abs_path(sys.argv[1])
         chroma_path = to_abs_path("../chroma_db")
-        g_infos.set_target_path(target_path)
-        g_infos.set_chroma_path(chroma_path)
+
     except ValueError as e:
         print(f"Error: {e}")
     

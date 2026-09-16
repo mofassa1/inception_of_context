@@ -44,7 +44,7 @@ all:
 		ollama show $$model >/dev/null 2>&1 || ollama pull $$model || { echo "could not pull $$model, is Ollama running?"; exit 1; }; \
 	done
 	@mkdir -p chroma_db
-	@$(PYTHON) -m uvicorn p2.server:app --host 127.0.0.1 --port 8000 & ai_agent=$$!; \
+	@TARGET_PATH="$(FOLDER_PATH)" $(PYTHON) -m uvicorn p2.server:app --host 127.0.0.1 --port 8000 & ai_agent=$$!; \
 	indexer_log=$$(mktemp); \
 	trap 'kill $$ai_agent $$indexer $$indexer_output 2>/dev/null; rm -f "$$indexer_log"' EXIT INT TERM; \
 	echo "waiting for the AI agent server on $(AI_AGENT_URL) ..."; \
