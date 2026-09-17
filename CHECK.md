@@ -2,8 +2,8 @@
 
 What the dashboard still needs from the AI agent server (:8000). mhrima-server
 already uses your objects and names wherever they exist, so this list only has
-what cannot be done on our side. Items 1–6 are routes, items 7–12 are bugs in the
-current code. All outputs below were captured from your server on this repo.
+what cannot be done on our side. First: what changed on our side. Then the index,
+items 1–6 (routes), 7–16 (bugs). All outputs below were captured by running your code.
 
 ```
  dashboard  ────►  mhrima-server :8001  ────►  AI agent :8000
@@ -81,25 +81,332 @@ These routes of yours work with the dashboard today, nothing to change:
 └────────────────────────┴──────────────────────────────────┴───────────────────────────────────────────────────┘
 ```
 
+## What changed on our side (2026-09-17)
+
+The dashboard side was reworked so the project runs on a laptop without a GPU, and `p3_beta`
+was rewritten to do Part 3 of the subject. Everything below was measured on this machine:
+Intel i5-7500 (4 cores), 7.7 GiB RAM, AMD RX 470 (no CUDA), Ollama 0.13. The items after the
+index are what is left for the AI agent.
+
+### How to run it
+
+```bash
+make install               # machine report, you pick the two models, it pulls them, installs everything
+make FOLDER=<a project>    # AI agent + indexer + mhrima-server + dashboard, in this terminal
+make logs                  # the latest run, with colors
+make tests                 # the patch loop tests
+```
+
+`FOLDER` must be a small project folder, not this repository: a big file becomes one chunk and the
+answers take minutes (CHECK.md item 13), and the watcher would index the logs of the run
+(CHECK.md item 11).
+
+### The four changes
+
+```
+┌───┬───────────────────┬────────────────────────────────────────────────────────┬───────────────────────────────────────┐
+│ # │ part              │ what it does now                                       │ files                                 │
+├───┼───────────────────┼────────────────────────────────────────────────────────┼───────────────────────────────────────┤
+│ 1 │ make install      │ checks the machine, you pick the models, it pulls them │ setup/, Makefile, models.mk           │
+│ 2 │ one terminal      │ everything starts together, one log file, one format   │ Makefile, mhrima-server.py, main.cjs  │
+│ 3 │ lighter dashboard │ less memory, no rebuild when nothing changed           │ electron/main.cjs, main.tsx, Makefile │
+│ 4 │ p3_beta           │ the patch loop of the subject, one module per job      │ p3_beta/, tests/test_patch_loop.py    │
+└───┴───────────────────┴────────────────────────────────────────────────────────┴───────────────────────────────────────┘
+```
+
+### 1. `make install` picks the models
+
+`make install` runs three steps: pick and pull the models, install the Python packages, install the
+dashboard packages. Each one can be run alone (`make install-models`, `make install-python`,
+`make install-dashboard`).
+
+### The picker
+
+`uv run setup/pick_models.py` needs no `.venv`: the script carries its own dependencies
+(questionary, psutil). It prints the machine, then asks two questions with the arrow keys.
+
+```
+Machine
+  CPU     4 cores
+  RAM     4.9 GiB free of 7.7 GiB
+  GPU     no NVIDIA GPU: the models run on the CPU, torch is installed for the CPU
+  Disk    111 GiB free for the models (/usr/share/ollama/.ollama/models)
+  Ollama  running, models: qwen2.5-coder:3b
+
+? Model for Ask (questions about the code)
+ » qwen2.5-coder:3b     1.8 GiB download, 2.0 GiB RAM  (Recommended, installed)
+   qwen2.5:1.5b         0.9 GiB download, 1.1 GiB RAM
+   qwen2.5-coder:0.5b   0.4 GiB download, 0.5 GiB RAM
+```
+
+- **(Recommended)** is the biggest model that fits the free RAM, minus the 1.5 GiB the rest of the
+  project needs (measured).
+- The second question also offers "same as the Ask model", which keeps one model in RAM.
+- The choice is saved in `models.mk` (gitignored), read by the Makefile and passed to the AI agent
+  server as `ASK_MODEL` and `CODE_MODEL`.
+- Without a terminal it keeps the previous choice, or takes the recommended one.
+
+```
+┌─────────────────────────┬──────────┬─────────────────┐
+│ model                   │ download │ RAM when loaded │
+├─────────────────────────┼──────────┼─────────────────┤
+│ qwen2.5(-coder):3b      │ 1.8 GiB  │ 2.02 GiB        │
+│ qwen2.5(-coder):1.5b    │ 0.9 GiB  │ 1.10 GiB        │
+│ qwen2.5(-coder):0.5b    │ 0.4 GiB  │ 0.49 GiB        │
+│ the rest of the project │          │ 1.5 GiB         │
+└─────────────────────────┴──────────┴─────────────────┘
+```
+
+### Torch without CUDA
+
+`requirements.txt` is Aziz's file and is not changed. When `nvidia-smi` finds no GPU, `make
+install-python` installs the same list without the CUDA packages:
+
+```make
+grep -v -E '^(nvidia-|cuda-|triton)' requirements.txt | uv pip install --torch-backend cpu -r -
+```
+
+Result: `torch 2.13.0+cpu`, no `nvidia-*` package, `.venv` is 1.4 GB instead of about 6 GB.
+
+### 2. One terminal, one log file
+
+`make FOLDER=<folder>` starts the AI agent server, its indexer, mhrima-server and the dashboard,
+one after another, in this terminal. Closing the dashboard, Ctrl+C, or any part stopping ends the
+run. Before starting, it checks that ports 8000 and 8001 are free and says which process holds them.
+
+Every line of every part goes to `.logs/<date_time>.log`, with `.logs/latest.log` pointing to the
+newest run. `make logs` prints the latest run with colors.
+
+```
+make:      16:45:53 INFO    the AI agent server is ready
+indexer:   16:46:04 INFO    Total chunks indexed: 13
+server:    16:46:05 INFO    AI agent POST /ask/stream: 200, streaming (0.2 s)
+server:    16:46:22 INFO    answer done (17.2 s): first text after 13.9 s, 157 characters
+ai-agent:  16:46:31 WARNING 127.0.0.1:1 - "GET /chunks?offset=0 HTTP/1.1" 404 Not Found
+ui:        16:46:32 ERROR   page: Failed to load resource: 502 (index.html:0)
+```
+
+```
+┌─────────┬───────────────────────────────────────────────────────────────────────────────┐
+│ source  │ make, ai-agent, indexer, server (mhrima-server), ui (dashboard)               │
+│ level   │ from the LEVEL: the line starts with, a traceback, Error/Warning, 4xx and 5xx │
+│ message │ paths relative to the project folder, a progress bar keeps its last state     │
+│ dropped │ empty lines, the Hugging Face token warning, the Electron and VAAPI notices   │
+└─────────┴───────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **mhrima-server** writes one line per call to the AI agent (status, duration) and one line per
+  answer: done, cancelled or failed, with the time of the first word. A stopped AI agent in the
+  middle of an answer is logged and the dashboard gets an error.
+- **The dashboard** sends its page errors to the same log.
+- **`make FOLDER=` refuses a folder that contains this repository**: the AI agent's watcher would
+  index its own log again and again (CHECK.md item 11).
+
+### 3. A lighter dashboard
+
+```
+┌────────────────────────────────────────────────┬──────────────────────────────────────────────────┐
+│ change                                         │ result                                           │
+├────────────────────────────────────────────────┼──────────────────────────────────────────────────┤
+│ spellcheck off in the window                   │ Electron 426 -> 406 MB with a file open          │
+│ no refetch when the window gets focus, 1 retry │ no burst of requests when switching windows      │
+│ dist rebuilt only when a source changed        │ about 10 s saved on every start (0.01 s instead) │
+│ one tab per file (bug fix)                     │ a closed file no longer stays on screen          │
+└────────────────────────────────────────────────┴──────────────────────────────────────────────────┘
+```
+
+**The duplicate tab:** Electron sent the launch paths twice (once on request, once on
+`did-finish-load`), and `openFile` checked for an open tab before reading the file, so two tabs with
+the same path were created. React cannot remove duplicate keys cleanly, so closing one left a ghost.
+Now Electron sends the list once, and `useTabs.openFile` never adds a path that is already open.
+
+**Tried and dropped:** `app.disableHardwareAcceleration()` used about twice the CPU and crashed
+Electron on exit (`FATAL: GPU process isn't usable`). Lazy panels would save almost nothing: the
+heavy code (CodeMirror, react-markdown) is in the editor, which always loads.
+
+### 4. p3_beta does Part 3 of the subject
+
+`p2/routers/patch_loop.py` still calls `loop(query, k, target_path, ignored_paths)` and gets the same
+dictionary. Behind it, `patcher.py` is gone and every job has its own module:
+
+```
+┌─────────────────┬─────────────────────────────────────────┬────────────────────────┐
+│ module          │ what it does                            │ writes in the project? │
+├─────────────────┼─────────────────────────────────────────┼────────────────────────┤
+│ patch_loop.py   │ loop(): up to 3 attempts, rollback      │ no                     │
+│ generator.py    │ picks the files, asks the code model    │ no                     │
+│ prompt.py       │ the prompt text and its <<<IOC markers  │ no                     │
+│ sanity_check.py │ check_patch(): the refusals below       │ no, it only reads      │
+│ apply_safely.py │ snapshot, apply, restore                │ yes, the only one      │
+│ validation.py   │ reads ioc.config.yml, runs the command  │ no                     │
+│ paths.py        │ paths inside the project, ignored paths │ no                     │
+└─────────────────┴─────────────────────────────────────────┴────────────────────────┘
+```
+
+### Where the old code went
+
+```
+┌───────────────────────────────┬───────────────────────────────┬─────────────────────────────────────────┐
+│ before                        │ now                           │ what changed                            │
+├───────────────────────────────┼───────────────────────────────┼─────────────────────────────────────────┤
+│ Patcher.build_prompt_template │ prompt.build_prompt           │ the KeyError is gone, feedback included │
+│ Patcher.answer_user_query     │ generator.generate_patch      │ sends whole files, not chunks           │
+│ Patcher.sanity_checker        │ sanity_check.check_patch      │ the six refusals of the subject, plus 8 │
+│ Patcher.create_backup         │ apply_safely.take_snapshot    │ bytes, mode, time, new folders          │
+│ Patcher.atomic_replacement    │ apply_safely.apply_patch      │ all *.ioc.tmp, then os.replace          │
+│ Patcher.restore_backup        │ apply_safely.restore_snapshot │ also removes created files/folders      │
+│ Patcher.launch_tests          │ validation.run_validation     │ {files}, timeout, no __pycache__ left   │
+└───────────────────────────────┴───────────────────────────────┴─────────────────────────────────────────┘
+```
+
+### The prompt sends whole files
+
+The subject asks for the complete file back (`content` holds the whole post-change file). A model
+cannot write that from a few chunks, so the search only picks the files, and the prompt carries
+their current text, inside markers, within a budget that fits the model's window:
+
+```
+<<<IOC FILE notes/service.py>>>
+class NoteService:
+    ...
+<<<IOC END>>>
+```
+
+At most 3 files and 6000 characters of content, plus the list of the indexed files (without the
+ignored ones). A file that contains those markers is refused (rule 1 below).
+
+### The refusals
+
+Codes 1 to 6 are the six hard refusals of the subject, checked against the files on disk before
+anything is written:
+
+```
+┌──────┬────────────────────────────────────────────────────────────────────────┐
+│ code │ refused because                                                        │
+├──────┼────────────────────────────────────────────────────────────────────────┤
+│ 1    │ the content contains the <<<IOC markers of the prompt                  │
+│ 2    │ 'create' on a file that already exists                                 │
+│ 3    │ a non-empty file would become "", "None" or "null"                     │
+│ 4    │ a NEW function whose body is only pass, ... or return None             │
+│ 5    │ a file would shrink by more than 60 %                                  │
+│ 6    │ more than 3 files                                                      │
+│ 7    │ the patch has no file to change                                        │
+│ 8    │ the request needs no change: the answer is the summary, the loop stops │
+│ 9    │ 'modify' or 'delete' on a file that does not exist                     │
+│ 10   │ a path outside the project                                             │
+│ 11   │ a path ignored for this conversation                                   │
+│ 12   │ the same path twice                                                    │
+│ 13   │ the file to modify is not a text file                                  │
+│ 14   │ the model answer could not be read as a patch                          │
+└──────┴────────────────────────────────────────────────────────────────────────┘
+```
+
+Rule 4 compares the functions of the old and the new file: a stub that was already there
+(an abstract method, for example) does not block a patch that touches something else.
+
+### Apply, validate, roll back
+
+```
+┌──────────┬──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ snapshot │ bytes, mode and time of every touched file, its *.ioc.tmp, and the folders that do not exist yet │
+│ apply    │ every *.ioc.tmp is written first, then each os.replace, then the deletes                         │
+│ validate │ validation.command of ioc.config.yml, {files} = the changed files, quoted                        │
+│ green    │ the loop stops and keeps the files                                                               │
+│ red      │ restore, the error goes back to the model, next attempt                                          │
+│ after 3  │ restore, rolled_back: true, files_touched lists what was put back                                │
+└──────────┴──────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Without `ioc.config.yml`**, the baseline of the subject runs: `python -m py_compile {files}` on
+  the changed `.py` files, and the answer says so. A broken config stops the loop before attempt 1.
+- **The command runs** with `.venv/bin` first in `PATH`, a 120 s timeout (the whole process group is
+  stopped), empty stdin, and `PYTHONPYCACHEPREFIX` + `PYTEST_ADDOPTS=-p no:cacheprovider` so
+  validation leaves no `__pycache__` or `.pytest_cache` in the project.
+- **The rollback is in a `finally`**: even if something raises in the middle, the project goes back
+  to the state it had before the loop.
+- **One loop at a time** (a lock), and a `target_path` other than the indexed project is refused.
+
+### The real run
+
+With `qwen2.5-coder:3b` on a small project (5 files), through mhrima-server `POST /patch/loop`:
+
+```
+┌────────────────────────────────────────────────┬──────────┬──────┬─────────────────────────────────────────────────┐
+│ request                                        │ attempts │ time │ result                                          │
+├────────────────────────────────────────────────┼──────────┼──────┼─────────────────────────────────────────────────┤
+│ "Add a count method to NoteService"            │ 1        │ 56 s │ the method is in the file, validation passed    │
+│ "Add a rename method", validation always fails │ 3        │ 93 s │ tree identical byte for byte, nothing left over │
+└────────────────────────────────────────────────┴──────────┴──────┴─────────────────────────────────────────────────┘
+```
+
+The second run also showed a problem on the AI agent side: `GET /status` sent during the loop
+answered after 68 s, because its route is `async def` and blocks the server. It is CHECK.md item 16.
+
+### Tests
+
+`make tests` runs `tests/test_patch_loop.py`: 23 tests, about 5 seconds, no model and no ChromaDB
+(a fake generator is put in `sys.modules`, the project is a temporary folder).
+
+```
+┌───────────────────────┬─────────────────────────────────────────────────────────────────────────┐
+│ test                  │ checks that                                                             │
+├───────────────────────┼─────────────────────────────────────────────────────────────────────────┤
+│ a green patch stays   │ the file keeps the change, no *.ioc.tmp, no __pycache__                 │
+│ 3 red attempts        │ the tree is byte for byte the one from before, modes and times included │
+│ each refusal          │ 11 cases, nothing written, the reason goes back to the model            │
+│ an old stub           │ a stub already in the file does not block the patch                     │
+│ a question            │ one attempt, code 8, the answer is the summary                          │
+│ an unreadable answer  │ code 14, the next attempt gets the reason                               │
+│ {files}               │ a path with a space arrives quoted in the command                       │
+│ no config             │ the baseline compiles the .py files and says so                         │
+│ a broken config       │ the loop stops before asking the model                                  │
+│ a slow command        │ stopped after the timeout, files restored                               │
+│ a crash in the middle │ the exception goes up and the files are still restored                  │
+│ another target_path   │ refused                                                                 │
+└───────────────────────┴─────────────────────────────────────────────────────────────────────────┘
+```
+
+### What was touched in your code
+
+```
+┌──────────────────────────┬─────────────────────┬─────────────────────────────────────────────────────────────────────────┐
+│ file                     │ change              │ why                                                                     │
+├──────────────────────────┼─────────────────────┼─────────────────────────────────────────────────────────────────────────┤
+│ p2/llm_object.py         │ one line            │ reads ASK_MODEL / CODE_MODEL, same defaults as before                   │
+│ p3_beta/                 │ rewritten           │ you gave it to me; the map above says where each piece went             │
+│ p1/utils.py, p1/index.py │ EXCLUDED_DIRS moved │ the watcher and the first walk share one list (item 11)                 │
+│ p1/monitor.py            │ two fixes           │ skips hidden/excluded/database folders, indexes a renamed file (11, 12) │
+│ p1/chunker.py            │ 40-line pieces      │ a file without functions is no longer one huge chunk (item 13)          │
+│ p1/embedder.py           │ one line            │ the cache check looks where the model is saved (item 14)                │
+│ p2/routers/patch_loop.py │ async def -> def    │ the loop no longer freezes the server (item 16)                         │
+└──────────────────────────┴─────────────────────┴─────────────────────────────────────────────────────────────────────────┘
+```
+
+`requirements.txt` is not touched either: the CUDA packages are filtered at install time.
+
 ## Index
 
 ```
-┌────┬───────────────────────┬──────────────────────────────┬───────────────────────────────┐
-│ #  │ item                  │ screen / affects             │ today                         │
-├────┼───────────────────────┼──────────────────────────────┼───────────────────────────────┤
-│ 1  │ GET /status           │ Overview                     │ 2 fields missing, 2 hardcoded │
-│ 2  │ GET /events           │ Overview → Live activity     │ 404                           │
-│ 3  │ GET /chunks           │ ChromaDB Explorer            │ 404                           │
-│ 4  │ POST /ask/stream      │ chat Ask mode, Ask → Ask LLM │ text/plain, no sources        │
-│ 5  │ POST /patch/loop      │ chat Agent mode, Patch Loop  │ 404                           │
-│ 6  │ ignored_paths         │ file tree ignore toggles     │ field dropped                 │
-│ 7  │ build_prompt_template │ patch loop                   │ empty prompt, KeyError        │
-│ 8  │ sanity_checker        │ patch loop                   │ SyntaxError, TypeError        │
-│ 9  │ loop()                │ patch loop                   │ UnboundLocalError             │
-│ 10 │ loop() apply steps    │ patch loop                   │ FileExistsError               │
-│ 11 │ watcher               │ index, every answer          │ .git indexed                  │
-│ 12 │ watcher on rename     │ index                        │ file leaves the index         │
-└────┴───────────────────────┴──────────────────────────────┴───────────────────────────────┘
+┌────┬───────────────────────┬──────────────────────────────────┬───────────────────────────────┐
+│ #  │ item                  │ screen / affects                 │ today                         │
+├────┼───────────────────────┼──────────────────────────────────┼───────────────────────────────┤
+│ 1  │ GET /status           │ Overview                         │ 2 fields missing, 2 hardcoded │
+│ 2  │ GET /events           │ Overview → Live activity         │ 404                           │
+│ 3  │ GET /chunks           │ ChromaDB Explorer                │ 404                           │
+│ 4  │ POST /ask/stream      │ chat Ask mode, Ask → Ask LLM     │ text/plain, no sources        │
+│ 5  │ POST /patch/loop      │ chat Agent mode, Patch Loop      │ done, the route answers       │
+│ 6  │ ignored_paths         │ file tree ignore toggles         │ field dropped                 │
+│ 7  │ build_prompt_template │ patch loop                       │ fixed, p3_beta rewritten      │
+│ 8  │ sanity_checker        │ patch loop                       │ fixed, p3_beta rewritten      │
+│ 9  │ loop()                │ patch loop                       │ fixed, p3_beta rewritten      │
+│ 10 │ loop() apply steps    │ patch loop                       │ fixed, p3_beta rewritten      │
+│ 11 │ watcher               │ index, every answer              │ fixed in your code            │
+│ 12 │ watcher on rename     │ index                            │ fixed in your code            │
+│ 13 │ chunker               │ every answer, patch prompt       │ fixed in your code            │
+│ 14 │ embedder              │ every start                      │ fixed in your code            │
+│ 15 │ two Chroma clients    │ Ask, Retrieve, patch loop        │ search fails until restart    │
+│ 16 │ async def /patch/loop │ every screen, while a patch runs │ fixed in your code            │
+└────┴───────────────────────┴──────────────────────────────────┴───────────────────────────────┘
 ```
 
 - [1. GET /status](#1-get-status)
@@ -114,6 +421,10 @@ These routes of yours work with the dashboard today, nothing to change:
 - [10. loop writes each change twice](#10-loop-writes-each-change-twice)
 - [11. The watcher indexes .git](#11-the-watcher-indexes-git)
 - [12. A renamed file leaves the index](#12-a-renamed-file-leaves-the-index)
+- [13. Big chunks make answers take minutes](#13-big-chunks-make-answers-take-minutes)
+- [14. The embedder goes online at every start](#14-the-embedder-goes-online-at-every-start)
+- [15. A search on a new folder breaks every later search](#15-a-search-on-a-new-folder-breaks-every-later-search)
+- [16. The patch loop freezes the whole server](#16-the-patch-loop-freezes-the-whole-server)
 
 ## Shared objects
 
@@ -583,6 +894,10 @@ Fixed: the first line is `{"type":"sources", ...}`.
 
 ## 5. POST /patch/loop
 
+> **Done (2026-09-17).** You added `p2/routers/patch_loop.py`, and `p3_beta/` was rewritten
+> behind it (see CHANGES.md). The route answers the shape below. The rest of this section is
+> kept as the description of what it does.
+
 ```
 ┌──────────┬──────────────────────────────────────────────┐
 │ route    │ POST /patch/loop                             │
@@ -858,6 +1173,9 @@ Fixed: `sources from ignored paths: []` (it needs the JSON lines of section 4 to
 
 ## 7. build_prompt_template returns an empty prompt
 
+> **Fixed (2026-09-17).** `p3_beta/` was rewritten and `patcher.py` no longer exists, so the
+> code quoted below is gone. The prompt is built in `p3_beta/prompt.py` (see CHANGES.md).
+
 ```
 ┌─────────┬──────────────────────────────────────────────┐
 │ file    │ p3_beta/patcher.py:152                       │
@@ -937,6 +1255,9 @@ With this change the same script prints:
 ---
 
 ## 8. sanity_checker crashes
+
+> **Fixed (2026-09-17).** The checks now live in `p3_beta/sanity_check.py`, with one code per
+> refusal and no crash on a non-Python file (see CHANGES.md).
 
 ```
 ┌─────────┬───────────────────────────────────────────────────────────────┐
@@ -1019,6 +1340,8 @@ modify an indexed file   -> returns 9
 
 ## 9. loop crashes before the first attempt
 
+> **Fixed (2026-09-17).** `p3_beta/patch_loop.py` was rewritten (see CHANGES.md).
+
 ```
 ┌─────────┬────────────────────────────────────┐
 │ file    │ p3_beta/patch_loop.py:62           │
@@ -1094,6 +1417,8 @@ loop() started its first attempt
 ---
 
 ## 10. loop writes each change twice
+
+> **Fixed (2026-09-17).** Writing happens once, in `p3_beta/apply_safely.py` (see CHANGES.md).
 
 ```
 ┌─────────┬──────────────────────────────────────────────────────────────────┐
@@ -1179,6 +1504,10 @@ delete  ok, files now: []
 
 ## 11. The watcher indexes .git
 
+> **Fixed in your code (2026-09-17).** `EXCLUDED_DIRS` moved to `p1/utils.py`, and the watcher
+> now skips hidden folders, the excluded folders and its own ChromaDB folder. The section below
+> is the reason, kept for review.
+
 ```
 ┌─────────┬──────────────────────────────────────────────────────────────┐
 │ file    │ p1/monitor.py:38                                             │
@@ -1253,6 +1582,43 @@ Added new chunks: {'<project>/.git/COMMIT_EDITMSG::__file__'} for file: <project
 indexed: ['<project>/.git/COMMIT_EDITMSG']
 ```
 
+### Worse: a log file inside the folder
+
+Every line written to a log inside the folder is indexed again, and indexing writes a new line to
+the indexer log, which is inside the folder too:
+
+```
+┌───────────────────────────────────────┬───────────────────────────────────────────────┐
+│ step                                  │ result                                        │
+├───────────────────────────────────────┼───────────────────────────────────────────────┤
+│ a line is added to .logs/ai-agent.log │ indexer.log: "Updated chunk ... ai-agent.log" │
+│ indexer.log changed                   │ indexer.log: "Updated chunk ... indexer.log"  │
+│ indexer.log changed again             │ the same line again, forever                  │
+└───────────────────────────────────────┴───────────────────────────────────────────────┘
+```
+
+```bash
+mkdir -p /tmp/loop_project/.logs && printf 'def add(a, b):\n    return a + b\n' > /tmp/loop_project/calc.py
+cd p1 && PYTHONPATH=.:.. PYTHONUNBUFFERED=1 timeout 70 python index.py /tmp/loop_project > /tmp/loop_project/.logs/indexer.log 2>&1 &
+until grep -q '^Total chunks' /tmp/loop_project/.logs/indexer.log; do sleep 1; done; sleep 3
+echo "INFO: GET /status 200 OK" >> /tmp/loop_project/.logs/ai-agent.log; sleep 3
+echo "INFO: GET /files 200 OK"  >> /tmp/loop_project/.logs/ai-agent.log
+for second in 10 20 30 40; do sleep 10; echo "after $second s: $(wc -l < /tmp/loop_project/.logs/indexer.log) lines"; done
+grep -c 'Updated chunk.*indexer.log' /tmp/loop_project/.logs/indexer.log
+```
+
+```
+after 10 s: 29 lines
+after 20 s: 53 lines
+after 30 s: 77 lines
+after 40 s: 99 lines
+91
+```
+
+Nothing else touches the folder: the indexer embeds its own log 91 times in 40 s, and the log grows
+by about 750 bytes a second until it is stopped. Until the fix below is in, `make FOLDER=<folder>`
+refuses a folder that contains this repository, because its `.logs/` would be inside.
+
 ### Suggested fix
 
 ```python
@@ -1285,6 +1651,8 @@ indexed: []
 ---
 
 ## 12. A renamed file leaves the index
+
+> **Fixed in your code (2026-09-17).** `p1/monitor.py` indexes `event.dest_path` on a move.
 
 ```
 ┌─────────┬──────────────────────────────────────────────────────────┐
@@ -1375,3 +1743,383 @@ before rename: ['<project>/app.py']
 Deleted chunks: ['<project>/app.py::add'] for file: <project>/app.py
 after rename:  ['<project>/service.py']
 ```
+
+---
+
+## 13. Big chunks make answers take minutes
+
+> **Fixed in your code (2026-09-17).** `p1/chunker.py` has `MAX_CHUNK_LINES = 40` and splits a
+> file without functions into pieces (the Makefile chunk went from 9191 to 2570 characters).
+
+```
+┌─────────┬────────────────────────────────────────────────────────────────────┐
+│ file    │ p1/chunker.py:106                                                  │
+│ affects │ every /ask answer, and the context of the patch loop               │
+│ result  │ a file without functions is one chunk: 152 s before the first word │
+└─────────┴────────────────────────────────────────────────────────────────────┘
+```
+
+### The code
+
+```python
+# p1/chunker.py:126   no function found: the whole file becomes one chunk
+if not chunks:
+    chunks = [Chunk(id=f"{filepath}::__file__", file=filepath, kind="raw",
+                    qualified_name="__file__", content=source, ...)]
+
+# p1/chunker.py:112   a "function" found by the regex runs until the next match, however long
+end_line = source[: matches[i + 1].start()].count("\n") if i + 1 < len(matches) else len(lines)
+```
+
+### What happens
+
+```
+┌──────────────────┬────────┬─────────────────────────────────┐
+│ file             │ chunks │ biggest chunk                   │
+├──────────────────┼────────┼─────────────────────────────────┤
+│ Makefile         │ 1      │ raw, 9191 characters            │
+│ requirements.txt │ 1      │ raw, 3178 characters            │
+│ CHECK.md         │ 9      │ function_regex, 8749 characters │
+└──────────────────┴────────┴─────────────────────────────────┘
+```
+
+`/ask` sends k=5 chunks. Two of these fill the model's 4096-token window, and on a CPU the model
+reads the whole window before the first word. Your server on this repository (210 chunks),
+qwen2.5-coder:3b, i5-7500 with 4 cores and no GPU:
+
+```
+┌────────────────────────────────────────────────┬────────────────────────────────────────────┬────────────┐
+│ question                                       │ chunks found                               │ first word │
+├────────────────────────────────────────────────┼────────────────────────────────────────────┼────────────┤
+│ How does make install pick the models?         │ models.mk, Makefile, requirements.txt, ... │ 151.8 s    │
+│ What does mhrima-server do with conversations? │ 5 functions of mhrima-server.py            │ 11.9 s     │
+└────────────────────────────────────────────────┴────────────────────────────────────────────┴────────────┘
+```
+
+The dashboard shows nothing during those 152 s, so the answer looks stuck.
+
+### Reproduce
+
+```bash
+cd p1 && PYTHONPATH=.:.. python - <<'EOF'
+from chunker import Chunker
+for name in ["../Makefile", "../requirements.txt", "../CHECK.md"]:
+    chunks = Chunker().chunk_python_file(name, open(name).read())
+    biggest = max(chunks, key=lambda chunk: len(chunk.content))
+    print(f"{name[3:]:<17} {len(chunks):>3} chunks, biggest: {biggest.kind:<15} {len(biggest.content):>5} characters")
+EOF
+```
+
+### Output
+
+```
+Makefile            1 chunks, biggest: raw              9191 characters
+requirements.txt    1 chunks, biggest: raw              3178 characters
+CHECK.md            9 chunks, biggest: function_regex   8749 characters
+```
+
+### Suggested fix
+
+```python
+# p1/chunker.py:20
+MAX_CHUNK_LINES = 40
+
+# p1/chunker.py   new method of Chunker: a range of lines becomes pieces of at most 40 lines
+def split_lines(self, filepath, lines, name, kind, start_line, end_line):
+    pieces = []
+    for piece_start in range(start_line, end_line + 1, MAX_CHUNK_LINES):
+        piece_end = min(piece_start + MAX_CHUNK_LINES - 1, end_line)
+        content = "".join(lines[piece_start - 1 : piece_end])
+        piece_name = name if piece_start == start_line else f"{name}@{piece_start}"
+        pieces.append(Chunk(
+            id=f"{filepath}::{piece_name}", file=filepath, kind=kind,
+            qualified_name=piece_name, content=content,
+            start_line=piece_start, end_line=piece_end,
+            content_hash=hash_chunk(content),
+        ))
+    return pieces
+
+# p1/chunker.py:118   in __chunk_with_regex_fallback, for each function found
+chunks.extend(self.split_lines(filepath, lines, name, "function_regex", start_line, end_line))
+
+# p1/chunker.py:126   no function found
+if not chunks:
+    chunks = self.split_lines(filepath, lines, "__file__", "raw", 1, len(lines))
+```
+
+With this change the same script prints:
+
+```
+Makefile            5 chunks, biggest: raw              2753 characters
+requirements.txt    4 chunks, biggest: raw               902 characters
+CHECK.md           30 chunks, biggest: function_regex   2074 characters
+```
+
+---
+
+## 14. The embedder goes online at every start
+
+> **Fixed in your code (2026-09-17).** `p1/embedder.py` looks for the model where it is really
+> saved. With no network the embedder now loads in 3.2 s.
+
+```
+┌─────────┬───────────────────────────────────────────────────────────────────────┐
+│ file    │ p1/embedder.py:25                                                     │
+│ affects │ every start of the AI agent server and of the indexer                 │
+│ result  │ the model on disk is seen as missing: about 5 s online, stuck offline │
+└─────────┴───────────────────────────────────────────────────────────────────────┘
+```
+
+### The code
+
+```python
+# p1/embedder.py:25   looks in <cache_folder>/hub/
+def _is_cached(self) -> bool:
+    safe_name = self.model_name.replace("/", "--")
+    expected = os.path.join(self.cache_folder, "hub", f"models--{safe_name}")
+    return os.path.isdir(expected)
+```
+
+`cache_folder` is given to `HuggingFaceEmbeddings`, so the model is saved in
+`~/.cache/huggingface/models--sentence-transformers--all-MiniLM-L6-v2`, without `hub/`.
+
+### What happens
+
+```
+┌────────────────────┬──────────────────────────────────────────────────────────────────┐
+│ step               │ result                                                           │
+├────────────────────┼──────────────────────────────────────────────────────────────────┤
+│ _is_cached()       │ False, the model folder is looked for in hub/                    │
+│ _init_embeddings() │ HF_HUB_OFFLINE removed, "not cached yet, downloading once..."    │
+│ with network       │ requests to huggingface.co: 15:52:37 to 15:52:42 in ai-agent.log │
+│ without network    │ "Connection refused ... Retrying in 8s", not loaded after 120 s  │
+└────────────────────┴──────────────────────────────────────────────────────────────────┘
+```
+
+### Reproduce
+
+```bash
+cd p1 && PYTHONPATH=.:.. python - <<'EOF'
+import os
+from embedder import Embedder
+embedder = Embedder()
+print("_is_cached():", embedder._is_cached())
+print("model folder on disk:", os.path.isdir(os.path.expanduser("~/.cache/huggingface/models--sentence-transformers--all-MiniLM-L6-v2")))
+EOF
+
+# the same start without network
+HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 PYTHONPATH=.:.. \
+    timeout 120 python -c "from embedder import Embedder; Embedder(); print('loaded')"
+```
+
+### Output
+
+```
+[embedder] 'sentence-transformers/all-MiniLM-L6-v2' not cached yet — downloading once...
+_is_cached(): False
+model folder on disk: True
+
+'[Errno 111] Connection refused' thrown while requesting HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/preprocessor_config.json
+Retrying in 8s [Retry 5/5].
+(no "loaded" after 120 s)
+```
+
+### Suggested fix
+
+```python
+# p1/embedder.py:28   the model folder is right in cache_folder
+expected = os.path.join(self.cache_folder, f"models--{safe_name}")
+```
+
+With this change `_is_cached()` is `True`, and the start without network loads the model in 5.9 s.
+
+---
+
+## 15. A search on a new folder breaks every later search
+
+```
+┌─────────┬────────────────────────────────────────────────────────────────────────────────┐
+│ files   │ p2/store.py:8, p1/index.py:67 (two processes, two Chroma clients)              │
+│ affects │ /ask/stream, /retrieve, the patch loop, on a folder indexed for the first time │
+│ result  │ 500 "Error creating hnsw segment reader: Nothing found on disk" until restart  │
+└─────────┴────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### The code
+
+```python
+# p2/store.py:8        the server process opens the collection
+vector_store = VectorStore("./chroma_db", collection_name=collection_name)
+
+# p1/index.py:67       the indexer is another process, with its own client on the same folder
+store = VectorStore(chroma_path=chroma_path, collection_name=collection_name_from_path(target_path))
+```
+
+The subject asks for the opposite: "The server lives next to the watcher and shares its ChromaDB
+collection through a single client per process."
+
+### What happens
+
+```
+┌──────────────────────────────────────┬───────────────────────────────────────────────────────────┐
+│ step                                 │ result                                                    │
+├──────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ server searches the empty collection │ [] and its client remembers: no vectors on disk           │
+│ indexer (other process) adds a chunk │ written to disk                                           │
+│ server searches again                │ Error creating hnsw segment reader: Nothing found on disk │
+│ indexer stops                        │ still the same error, until the server is restarted       │
+└──────────────────────────────────────┴───────────────────────────────────────────────────────────┘
+```
+
+Seen in the dashboard: a question asked on a new folder before its first file was indexed, then
+every later question answered `500`:
+
+```
+ai-agent:  16:32:27 WARNING 127.0.0.1:40090 - "POST /ask/stream HTTP/1.1" 500 Internal Server Error
+{"detail":"Error executing plan: Internal error: Error creating hnsw segment reader: Nothing found on disk"}
+```
+
+### Reproduce
+
+```bash
+cd p1 && PYTHONPATH=.:.. python - <<'EOF'
+import subprocess, sys, tempfile, time
+from db import VectorStore
+
+chroma = tempfile.mkdtemp()
+server_store = VectorStore(chroma_path=chroma, collection_name="codebase")
+print("server, empty collection: search =", server_store.cosine_similarity_search([0.1] * 384, n_results=1))
+
+indexer = subprocess.Popen([sys.executable, "-c", f"""
+import time
+from db import VectorStore
+store = VectorStore(chroma_path={chroma!r}, collection_name="codebase")
+store.add(ids=["main.py::__file__"], documents=["print(1)"], embeddings=[[0.1] * 384], metadatas=[{{"file": "main.py"}}])
+print("indexer: added 1 chunk, still running", flush=True)
+time.sleep(40)
+"""])
+time.sleep(8)
+try:
+    print("server: search =", server_store.cosine_similarity_search([0.1] * 384, n_results=1))
+except Exception as error:
+    print("server: search failed:", error)
+indexer.terminate(); indexer.wait()
+try:
+    print("server, indexer stopped: search =", server_store.cosine_similarity_search([0.1] * 384, n_results=1))
+except Exception as error:
+    print("server, indexer stopped: search failed:", error)
+EOF
+```
+
+### Output
+
+```
+server, empty collection: search = []
+indexer: added 1 chunk, still running
+server: search failed: Error executing plan: Internal error: Error creating hnsw segment reader: Nothing found on disk
+server, indexer stopped: search failed: Error executing plan: Internal error: Error creating hnsw segment reader: Nothing found on disk
+```
+
+### Suggested fix
+
+Run the first indexing and the watcher inside the server, with the server's store and embedder.
+It also saves the second copy of the embedding model: the indexer process uses about 510 MB.
+
+```python
+# p1/index.py          the loop of __main__ becomes a function
+def index_and_watch(target_path, store, chunker, embedder):
+    for filepath in walk_target(target_path, store.get_chroma_path()):
+        ...                                   # the same body as today
+    print(f"Total chunks indexed: {store.get_all_chunks_count()}")
+    OnMyWatch(watchDirectory=target_path).run(store=store, chunker=chunker, embedder=embedder)
+
+# p2/server.py         after "from .embidder_object import embedder"
+import threading
+from chunker import Chunker
+from index import index_and_watch
+from .store import vector_store
+threading.Thread(target=index_and_watch, args=(target_path, vector_store, Chunker(), embedder), daemon=True).start()
+```
+
+`make FOLDER=<folder>` then starts only the server. With one client, the same steps work:
+
+```python
+store = VectorStore(chroma_path=tempfile.mkdtemp(), collection_name="codebase")
+print("empty collection: search =", store.cosine_similarity_search([0.1] * 384, n_results=1))
+threading.Thread(target=add_one_chunk).start()     # store.add(...) in another thread
+time.sleep(2)
+print("after the indexer thread: search =", store.cosine_similarity_search([0.1] * 384, n_results=1))
+```
+
+```
+empty collection: search = []
+indexer thread: added 1 chunk
+after the indexer thread: search = ['print(1)']
+```
+
+---
+
+## 16. The patch loop freezes the whole server
+
+> **Fixed in your code (2026-09-17).** `p2/routers/patch_loop.py` uses `def`, so FastAPI runs it
+> in a thread and the server keeps answering.
+
+```
+┌─────────┬───────────────────────────────────────────────────────────────┐
+│ file    │ p2/routers/patch_loop.py:48                                   │
+│ affects │ every route of the AI agent while a patch loop runs (minutes) │
+│ result  │ GET /status answered after 68 s instead of 0.1 s              │
+└─────────┴───────────────────────────────────────────────────────────────┘
+```
+
+### The code
+
+```python
+# p2/routers/patch_loop.py:48   async def, but loop() is normal blocking code
+@router.post("/patch/loop", response_model=PatchLoopOutputDTO)
+async def patch_loop(body: PatchLoopInput):
+    return loop(query=body.query, ...)
+```
+
+An `async def` route runs inside the event loop. While `loop()` waits for the model and runs the
+validation command, nothing else of the server is served: `/status`, `/files`, `/ask/stream` all wait.
+
+### Measured
+
+```
+┌─────────────────────────────────────────────────┬──────────────┐
+│ request                                         │ answer after │
+├─────────────────────────────────────────────────┼──────────────┤
+│ GET /status, no patch running                   │ 0.1 s        │
+│ GET /status, sent 25 s into a patch loop        │ 68.3 s       │
+│ the patch loop itself (3 attempts, rolled back) │ 93 s         │
+└─────────────────────────────────────────────────┴──────────────┘
+```
+
+### Reproduce
+
+```bash
+# with the AI agent running on a small project
+(sleep 25; curl -s -o /dev/null -w "status after %{time_total} s\n" http://127.0.0.1:8000/status/) &
+curl -s -X POST http://127.0.0.1:8001/patch/loop -H 'Content-Type: application/json' \
+    -d '{"query": "Add a rename method to NoteService.", "k": 5}' > /dev/null
+wait
+```
+
+### Output
+
+```
+status after 68.345277 s
+```
+
+### Suggested fix
+
+Declare the route with `def`. FastAPI then runs it in a thread and the server keeps answering.
+
+```python
+# p2/routers/patch_loop.py:48
+@router.post("/patch/loop", response_model=PatchLoopOutputDTO)
+def patch_loop(body: PatchLoopInput):
+```
+
+`p3_beta` already refuses a second loop at the same time, so two dashboards cannot patch at once.
