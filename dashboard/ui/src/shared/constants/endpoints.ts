@@ -15,6 +15,10 @@ export const ENDPOINTS = {
   LIST_IGNORE_RULES: "/conversations",
   SET_IGNORE_RULE: "/conversations",
 
+  GET_MODELS: "/models",
+  SET_MODELS: "/models",
+  PULL_MODEL: "/models/pull",
+
   GET_STATUS: "/status",
   GET_FILE: "/file",
   GET_CHUNKS: "/chunks",

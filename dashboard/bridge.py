@@ -95,7 +95,7 @@ def create_tables():
 # The AI agent server does the indexing, retrieval, answers and patches.
 # Every AI route below has its DTOs on top of it: the answer of the AI agent
 # is checked against them, so a route works as soon as the AI agent returns
-# that shape (see CHECK.md).
+# that shape (README, "Routes").
 # ---------------------------------------------------------------------------
 
 
@@ -138,7 +138,7 @@ async def call_ai_agent(method, path, output_dto, params=None, body=None):
     except ValueError as error:
         raise HTTPException(
             status_code=502,
-            detail=f"AI agent {method} {path} did not answer the shape in CHECK.md: {error}",
+            detail=f"AI agent {method} {path} did not answer the shape the bridge expects: {error}",
         )
 
 
@@ -178,7 +178,7 @@ async def stream_from_ai_agent(method, path, body=None):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="mhrima-server")
+app = FastAPI(title="bridge")
 
 app.add_middleware(
     CORSMiddleware,
@@ -743,6 +743,85 @@ class StatusOutputDTO(BaseModel):
 @app.get("/status", response_model=StatusOutputDTO)
 async def get_status():
     return await call_ai_agent("GET", "/status", StatusOutputDTO)
+
+
+# /models -------------------------------------------------------------------
+#
+# The window reads the two models, changes them, and pulls a model it does not
+# have yet. The pull answers one line of JSON per step, so the bar can move.
+
+
+class ModelChoiceDTO(BaseModel):
+    name: str
+    installed: bool
+    download_gib: float | None = None
+    ram_gib: float | None = None
+
+
+class ModelsOutputDTO(BaseModel):
+    ask_model: str
+    code_model: str
+    models: list[ModelChoiceDTO]
+
+
+class UseModelsInputDTO(BaseModel):
+    ask_model: str | None = None
+    code_model: str | None = None
+
+
+class PullModelInputDTO(BaseModel):
+    name: str
+
+
+class PullProgressLineDTO(BaseModel):
+    type: Literal["progress"]
+    status: str
+    completed: int
+    total: int
+
+
+class PullDoneLineDTO(BaseModel):
+    type: Literal["done"]
+    name: str
+
+
+class PullErrorLineDTO(BaseModel):
+    type: Literal["error"]
+    message: str
+
+
+@app.get("/models", response_model=ModelsOutputDTO)
+async def get_models():
+    return await call_ai_agent("GET", "/models", ModelsOutputDTO)
+
+
+@app.put("/models", response_model=ModelsOutputDTO)
+async def use_models(body: UseModelsInputDTO):
+    return await call_ai_agent("PUT", "/models", ModelsOutputDTO, body=body.model_dump())
+
+
+@app.post("/models/pull")
+async def pull_model(body: PullModelInputDTO):
+    client, ai_agent_response = await stream_from_ai_agent(
+        "POST", "/models/pull", body.model_dump()
+    )
+
+    async def pull_lines():
+        try:
+            async for line in ai_agent_response.aiter_lines():
+                if line.strip() == "":
+                    continue
+                for line_dto in [PullProgressLineDTO, PullDoneLineDTO, PullErrorLineDTO]:
+                    try:
+                        yield line_dto.model_validate_json(line).model_dump_json() + "\n"
+                        break
+                    except ValidationError:
+                        continue
+        finally:
+            await ai_agent_response.aclose()
+            await client.aclose()
+
+    return StreamingResponse(pull_lines(), media_type="application/x-ndjson")
 
 
 # GET /files ----------------------------------------------------------------

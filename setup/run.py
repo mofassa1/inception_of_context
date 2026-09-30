@@ -1,4 +1,4 @@
-"""Starts the project and keeps its log: the AI agent, the dashboard server, the window.
+"""Starts the project and keeps its log: the AI agent, the bridge, the window.
 
     python setup/run.py <folder>    start everything on that folder
     python setup/run.py --logs      show the log of the last run again
@@ -25,14 +25,14 @@ MODELS_FILE = REPO / "models.mk"
 LOGS_FOLDER = REPO / ".logs"
 LATEST_LOG = LOGS_FOLDER / "latest.log"
 AI_AGENT_PORT = 8000
-SERVER_PORT = 8001
+BRIDGE_PORT = 8001
 AI_AGENT_URL = f"http://127.0.0.1:{AI_AGENT_PORT}"
-SERVER_URL = f"http://127.0.0.1:{SERVER_PORT}"
+BRIDGE_URL = f"http://127.0.0.1:{BRIDGE_PORT}"
 READY_TIMEOUT_SECONDS = 600
 
 # The watcher of the AI agent indexes every file that changes. If the folder holds this
 # repository, a log written inside it would be indexed, which writes another line, forever
-# (CHECK.md item 11). Such a run keeps its log outside.
+# Such a run keeps its log outside the folder.
 OUTSIDE_LOGS_FOLDER = Path(
     f"/goinfre/{os.environ.get('USER', '')}/.ioc-logs"
     if Path(f"/goinfre/{os.environ.get('USER', '')}").is_dir()
@@ -46,7 +46,7 @@ NOISE = [
 ]
 LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 LEVEL_COLORS = {"DEBUG": "90", "INFO": "32", "WARNING": "33", "ERROR": "31", "CRITICAL": "31"}
-PART_COLORS = {"run": "35", "ai-agent": "36", "server": "96", "ui": "94"}
+PART_COLORS = {"run": "35", "ai-agent": "36", "bridge": "96", "ui": "94"}
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +245,7 @@ def checks_fail(folder, models):
         if not model_is_pulled(name):
             return f"{name} is not pulled or Ollama is not running, run: make install-models"
 
-    for port in (AI_AGENT_PORT, SERVER_PORT):
+    for port in (AI_AGENT_PORT, BRIDGE_PORT):
         if not port_is_free(port):
             return (
                 f"port {port} is already in use{who_uses(port)}\n"
@@ -278,8 +278,8 @@ def open_log(folder):
         log.write(
             "run",
             "WARNING",
-            "the folder holds this repository: the log is kept outside it (CHECK.md 11), "
-            "and big files make answers slow (CHECK.md 13)",
+            "the folder holds this repository: the log is kept outside it, "
+            "and a folder this size makes answers slow",
         )
     return log
 
@@ -307,9 +307,9 @@ def start_everything(folder, models, log, parts):
     if not wait_until_ready(agent, AI_AGENT_URL + "/status", log):
         return False
 
-    server = Part("server", [PYTHON, "dashboard/server.py"], log, env=environment)
-    parts.append(server)
-    if not wait_until_ready(server, SERVER_URL + "/docs", log):
+    bridge = Part("bridge", [PYTHON, "dashboard/bridge.py"], log, env=environment)
+    parts.append(bridge)
+    if not wait_until_ready(bridge, BRIDGE_URL + "/docs", log):
         return False
 
     window_environment = dict(environment)

@@ -26,7 +26,7 @@ DASHBOARD_SOURCES := $(shell find dashboard/ui/src -type f) dashboard/ui/index.h
 	dashboard/ui/vite.config.ts dashboard/ui/tsconfig.json dashboard/ui/package.json dashboard/ui/.env
 
 # make FOLDER=<folder>
-#   starts the AI agent server (:8000), mhrima-server (:8001) and the dashboard,
+#   starts the AI agent server (:8000), the bridge (:8001) and the dashboard,
 #   all their lines in this terminal and in .logs/latest.log;
 #   closing the dashboard or Ctrl+C stops everything. setup/run.py does the work.
 all:

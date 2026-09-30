@@ -4,7 +4,7 @@ import urllib.request
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 
-# Measured: the AI agent server, the indexer, mhrima-server and the dashboard, idle.
+# Measured: the AI agent server, the indexer, the bridge and the dashboard, idle.
 STACK_RAM_GIB = 1.5
 
 # Measured: download size from the Ollama registry, RAM of the loaded model with a 4096-token context.
