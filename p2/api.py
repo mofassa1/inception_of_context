@@ -168,6 +168,74 @@ def get_chunks(offset: int = 0, limit: int = 50):
 
 
 # ---------------------------------------------------------------------------
+# GET /models, PUT /models, POST /models/pull: which model answers, which one patches
+# ---------------------------------------------------------------------------
+
+
+class ModelChoiceDTO(BaseModel):
+    name: str
+    installed: bool
+    download_gib: float | None = None
+    ram_gib: float | None = None
+
+
+class ModelsDTO(BaseModel):
+    ask_model: str
+    code_model: str
+    models: list[ModelChoiceDTO]
+
+
+class UseModelsInputDTO(BaseModel):
+    ask_model: str | None = None
+    code_model: str | None = None
+
+
+class PullModelInputDTO(BaseModel):
+    name: str
+
+
+def as_models_dto():
+    return ModelsDTO(
+        ask_model=models.ASK_MODEL,
+        code_model=models.CODE_MODEL,
+        models=[ModelChoiceDTO(**choice) for choice in models.model_choices()],
+    )
+
+
+@app.get("/models", response_model=ModelsDTO)
+def get_models():
+    return as_models_dto()
+
+
+@app.put("/models", response_model=ModelsDTO)
+def put_models(body: UseModelsInputDTO):
+    try:
+        models.use_models(body.ask_model, body.code_model)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except OSError as error:
+        raise HTTPException(status_code=500, detail=f"models.mk could not be written: {error}")
+
+    log.info(f"models: {models.ASK_MODEL} for Ask, {models.CODE_MODEL} for the patch loop")
+    return as_models_dto()
+
+
+@app.post("/models/pull")
+def post_models_pull(body: PullModelInputDTO):
+    # One line of JSON per step of the download, so the window can show a bar.
+    def pull_lines():
+        try:
+            for progress in models.pull_model(body.name):
+                yield json.dumps({"type": "progress", **progress}) + "\n"
+            yield json.dumps({"type": "done", "name": body.name}) + "\n"
+        except Exception as error:
+            log.error(f"pull {body.name} failed: {error!r}")
+            yield json.dumps({"type": "error", "message": str(error)}) + "\n"
+
+    return StreamingResponse(pull_lines(), media_type="application/x-ndjson")
+
+
+# ---------------------------------------------------------------------------
 # POST /context: the chunks closest to an intent, ignored paths dropped
 # ---------------------------------------------------------------------------
 

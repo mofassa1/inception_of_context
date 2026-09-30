@@ -1,5 +1,7 @@
 # The two local models, through Ollama: one answers questions, one writes patches.
 # The names come from the environment, so make install decides which ones fit the machine.
+# The window can change them while the project runs, and the new names are written back
+# to models.mk so the next run starts with them.
 
 import os
 from typing import Literal
@@ -9,9 +11,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from pydantic import BaseModel
 
+from setup.ollama_models import MODELS as KNOWN_MODELS
+
 ASK_MODEL = os.environ.get("ASK_MODEL", "qwen2.5:3b")
 CODE_MODEL = os.environ.get("CODE_MODEL", "qwen2.5-coder:3b")
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+REPOSITORY_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_FILE = os.path.join(REPOSITORY_ROOT, "models.mk")
 # Measured: without a limit, one answer took 7.8 of the 20 cores and the machine crawled.
 MODEL_THREADS = int(os.environ.get("MODEL_THREADS", max(2, (os.cpu_count() or 4) // 3)))
 
@@ -39,6 +45,13 @@ def installed_models():
     return [model.get("model") or model.get("name") for model in ollama.list().get("models", [])]
 
 
+def is_installed(name, installed):
+    for installed_name in installed:
+        if installed_name in (name, name + ":latest"):
+            return True
+    return False
+
+
 def missing_models():
     installed = installed_models()
     missing = []
@@ -46,6 +59,66 @@ def missing_models():
         if not any(name in (installed_name or "") for installed_name in installed):
             missing.append(name)
     return sorted(missing)
+
+
+def model_choices():
+    # Every model the window can offer: the ones Ollama already has, and the ones of the
+    # picker of make install, which still have to be pulled.
+    installed = installed_models()
+    choices = []
+    for model in KNOWN_MODELS:
+        choices.append(
+            {
+                "name": model["name"],
+                "installed": is_installed(model["name"], installed),
+                "download_gib": model["download_gib"],
+                "ram_gib": model["ram_gib"],
+            }
+        )
+
+    known_names = [model["name"] for model in KNOWN_MODELS]
+    for name in installed:
+        if name not in known_names and name.removesuffix(":latest") not in known_names:
+            choices.append(
+                {"name": name, "installed": True, "download_gib": None, "ram_gib": None}
+            )
+    return choices
+
+
+def write_models_file():
+    with open(MODELS_FILE, "w", encoding="utf-8") as file:
+        file.write("# written by make install-models, and by the model picker of the window\n")
+        file.write(f"ASK_MODEL := {ASK_MODEL}\n")
+        file.write(f"CODE_MODEL := {CODE_MODEL}\n")
+
+
+def use_models(ask_model=None, code_model=None):
+    # The answer and the patch read ASK_MODEL and CODE_MODEL at every call, so a name
+    # changed here is used by the next question, with nothing to restart.
+    global ASK_MODEL, CODE_MODEL
+
+    installed = installed_models()
+    for name in [ask_model, code_model]:
+        if name is not None and not is_installed(name, installed):
+            raise ValueError(f"{name} is not pulled yet")
+
+    if ask_model is not None:
+        ASK_MODEL = ask_model
+    if code_model is not None:
+        CODE_MODEL = code_model
+    write_models_file()
+
+
+def pull_model(name):
+    if not any(choice["name"] == name for choice in model_choices()):
+        raise ValueError(f"{name} is not a model this project offers")
+
+    for progress in ollama.pull(name, stream=True):
+        yield {
+            "status": progress.get("status") or "",
+            "completed": progress.get("completed") or 0,
+            "total": progress.get("total") or 0,
+        }
 
 
 def chat_model(name, temperature):

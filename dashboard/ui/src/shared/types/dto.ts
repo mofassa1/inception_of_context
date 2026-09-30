@@ -242,6 +242,45 @@ export type IndexEventDTO = {
   at: number;
 };
 
+export type ModelChoiceDTO = {
+  name: string;
+  installed: boolean;
+  download_gib: number | null;
+  ram_gib: number | null;
+};
+
+export type ModelsOutputDTO = {
+  ask_model: string;
+  code_model: string;
+  models: ModelChoiceDTO[];
+};
+
+export type SetModelsInputDTO = {
+  ask_model?: string;
+  code_model?: string;
+};
+
+export type PullModelInputDTO = {
+  name: string;
+};
+
+export type PullProgressLineDTO = {
+  type: "progress";
+  status: string;
+  completed: number;
+  total: number;
+};
+
+export type PullDoneLineDTO = {
+  type: "done";
+  name: string;
+};
+
+export type PullErrorLineDTO = {
+  type: "error";
+  message: string;
+};
+
 export type AskInputDTO = {
   query: string;
   k?: number;

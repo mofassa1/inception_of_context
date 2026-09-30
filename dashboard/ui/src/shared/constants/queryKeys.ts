@@ -4,6 +4,7 @@ export const QUERY_KEYS = {
   LIST_CONVERSATIONS: "listConversations",
   GET_CONVERSATION: "getConversation",
   LIST_IGNORE_RULES: "listIgnoreRules",
+  GET_MODELS: "getModels",
   GET_STATUS: "getStatus",
   GET_FILE: "getFile",
   GET_CHUNKS: "getChunks",

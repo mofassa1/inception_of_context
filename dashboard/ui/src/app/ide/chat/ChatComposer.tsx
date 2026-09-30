@@ -3,6 +3,7 @@ import { ArrowUp, Square } from "lucide-react";
 import { COMPOSER_MAX_HEIGHT } from "@/shared/constants/config";
 import type { ChatMode } from "@/shared/types/chat";
 import { ChatModeToggle } from "./ChatModeToggle";
+import { ModelPicker } from "./ModelPicker";
 
 export function ChatComposer({
   draft,
@@ -53,6 +54,7 @@ export function ChatComposer({
             disabled={isStreaming}
             onChange={onModeChange}
           />
+          <ModelPicker mode={mode} disabled={isStreaming} />
         </div>
 
         <div className="flex items-end gap-1.5 pt-1 pr-1.5 pb-1.5 pl-2.5">
