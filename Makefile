@@ -33,9 +33,9 @@ INSTALL_PYTHON_PACKAGES = grep -v -E '^(nvidia-|cuda-|triton)' requirements.txt 
 endif
 
 # The dashboard is built again only when one of its sources changed.
-DASHBOARD_BUILD := p2/dashboard/dist/index.html
-DASHBOARD_SOURCES := $(shell find p2/dashboard/src -type f) p2/dashboard/index.html \
-	p2/dashboard/vite.config.ts p2/dashboard/tsconfig.json p2/dashboard/package.json p2/dashboard/.env
+DASHBOARD_BUILD := dashboard/ui/dist/index.html
+DASHBOARD_SOURCES := $(shell find dashboard/ui/src -type f) dashboard/ui/index.html \
+	dashboard/ui/vite.config.ts dashboard/ui/tsconfig.json dashboard/ui/package.json dashboard/ui/.env
 
 # One log file per run, .logs/latest.log points to the newest one.
 # When FOLDER contains this repository, the log of the run goes outside it: the AI agent's watcher
@@ -147,26 +147,23 @@ all:
 	log_line INFO "free RAM: $$(free -m | awk '/^Mem:/ { print $$7 " MiB of " $$2 " MiB" }')"; \
 	log_line INFO "code: commit $$(git rev-parse --short HEAD 2>/dev/null)$$(git status --porcelain 2>/dev/null | grep -q . && echo ', with uncommitted changes')"; \
 	start_logged ai-agent env TARGET_PATH="$(FOLDER_PATH)" ASK_MODEL="$(ASK_MODEL)" CODE_MODEL="$(CODE_MODEL)" \
-		PYTHONUNBUFFERED=1 $(PYTHON) -m uvicorn p2.server:app --host 127.0.0.1 --port $(AI_AGENT_PORT); ai_agent=$$!; \
-	wait_for "the AI agent server" $$ai_agent answers "$(AI_AGENT_URL)/" || exit 1; \
-	start_logged indexer env -C p1 PYTHONUNBUFFERED=1 $(CURDIR)/$(PYTHON) index.py "$(FOLDER_PATH)"; indexer=$$!; \
-	wait_for "the indexer" $$indexer grep -q -E '^indexer: +[0-9:]+ +[A-Z]+ +Collection:' "$(RUN_LOG)" || exit 1; \
-	start_logged server env PYTHONUNBUFFERED=1 $(PYTHON) mhrima-server.py; mhrima=$$!; \
+		PYTHONUNBUFFERED=1 $(PYTHON) -m uvicorn p2.api:app --host 127.0.0.1 --port $(AI_AGENT_PORT); ai_agent=$$!; \
+	wait_for "the AI agent server" $$ai_agent answers "$(AI_AGENT_URL)/status" || exit 1; \
+	start_logged server env PYTHONUNBUFFERED=1 $(PYTHON) dashboard/server.py; mhrima=$$!; \
 	wait_for "mhrima-server" $$mhrima answers "$(MHRIMA_SERVER_URL)/docs" || exit 1; \
-	start_logged ui env -C p2/dashboard -u ELECTRON_RUN_AS_NODE npx electron . "$(FOLDER_PATH)"; dashboard=$$!; \
+	start_logged ui env -C dashboard/ui -u ELECTRON_RUN_AS_NODE npx electron . "$(FOLDER_PATH)"; dashboard=$$!; \
 	log_line INFO "everything is running, close the dashboard or press Ctrl+C to stop"; \
-	wait -n -p stopped_pid $$ai_agent $$indexer $$mhrima $$dashboard; exit_code=$$?; \
+	wait -n -p stopped_pid $$ai_agent $$mhrima $$dashboard; exit_code=$$?; \
 	case $$stopped_pid in \
 		$$dashboard) stopped="the dashboard";; \
 		$$ai_agent) stopped="the AI agent server";; \
-		$$indexer) stopped="the indexer";; \
 		*) stopped="mhrima-server";; \
 	esac; \
 	stop_level=INFO; [ $$exit_code -eq 0 ] || stop_level=ERROR; \
 	log_line $$stop_level "$$stopped stopped (exit code $$exit_code), stopping everything"
 
 $(DASHBOARD_BUILD): $(DASHBOARD_SOURCES)
-	cd p2/dashboard && npm run build
+	cd dashboard/ui && npm run build
 
 # make logs: the latest run, with colors
 logs:
@@ -184,13 +181,13 @@ install-python:
 	$(INSTALL_PYTHON_PACKAGES)
 
 install-dashboard:
-	cd p2/dashboard && npm install --no-audit --no-fund
+	cd dashboard/ui && npm install --no-audit --no-fund
 
 tests:
 	@$(PYTHON) -m pytest tests -q; status=$$?; [ $$status -eq 0 ] || [ $$status -eq 5 ]
 
 clean:
-	rm -rf .venv .pytest_cache p2/dashboard/node_modules p2/dashboard/dist
+	rm -rf .venv .pytest_cache dashboard/ui/node_modules dashboard/ui/dist
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 
 fclean: clean

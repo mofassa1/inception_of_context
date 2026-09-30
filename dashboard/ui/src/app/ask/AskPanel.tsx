@@ -12,7 +12,15 @@ const K_CHOICES = [1, 3, 5, 8, 10, 15, 20];
 
 type ResultMode = "retrieve" | "ask" | null;
 
-function AnswerSourceRow({ source, cited rank }: { source: SourceDTO; cited: boolean }) {
+function AnswerSourceRow({
+  source,
+  cited,
+  rank,
+}: {
+  source: SourceDTO;
+  cited: boolean;
+  rank: number;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   return (

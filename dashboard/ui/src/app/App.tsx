@@ -10,7 +10,6 @@ import type { LaunchPath } from "@/shared/types/ide";
 import type { WorkspaceView } from "@/shared/types/view";
 import { AskPanel } from "./ask/AskPanel";
 import { ExplorerPanel } from "./explorer/ExplorerPanel";
-import { FilesPanel } from "./files/FilesPanel";
 import { IdeView } from "./ide/IdeView";
 import { useTabs } from "./ide/editor/hooks/useTabs";
 import { OverviewPanel } from "./overview/OverviewPanel";
@@ -99,7 +98,6 @@ export function App() {
       {view === "overview" && (
         <OverviewPanel events={events} connected={connected} />
       )}
-      {view === "files" && <FilesPanel />}
       {view === "explorer" && <ExplorerPanel />}
       {view === "ask" && <AskPanel />}
       {view === "patch" && <PatchPanel root={root} />}

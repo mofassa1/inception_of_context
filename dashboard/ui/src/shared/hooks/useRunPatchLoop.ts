@@ -16,7 +16,6 @@ export function useRunPatchLoop() {
         api.post<PatchLoopOutputDTO>(ENDPOINTS.RUN_PATCH_LOOP, body),
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.GET_STATUS] });
-        queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.GET_ALL_FILES] });
         queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.GET_CHUNKS] });
       },
     });

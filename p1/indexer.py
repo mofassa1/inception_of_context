@@ -14,6 +14,9 @@ EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_CACHE = os.path.expanduser("~/.cache/huggingface")
 EXCLUDED_DIRS = {"node_modules", "dist", "build", "venv", "__pycache__"}
 BINARY_SAMPLE_BYTES = 1024
+# Only real changes. Reading a file to index it also emits "opened" and "closed",
+# which would send the indexer straight back to the same file, forever.
+WATCHED_EVENTS = ("created", "modified", "moved", "deleted")
 
 
 class Embedder:
@@ -103,8 +106,17 @@ class Indexer:
                 continue
             for name in files:
                 count += self.index_file(os.path.join(folder, name))
+        self.forget_gone_files()
         self.report("indexed", self.target_path, count)
         return count
+
+    def forget_gone_files(self):
+        # A file deleted or renamed while the project was closed left chunks behind:
+        # nobody saw the event, so the first walk is the only chance to drop them.
+        for path in self.store.files_with_counts():
+            if not os.path.isfile(path):
+                self.store.delete_file(path)
+                self.report("deleted", path)
 
     def watch(self):
         observer = Observer()
@@ -129,7 +141,7 @@ class FolderWatcher(FileSystemEventHandler):
         self.indexer = indexer
 
     def on_any_event(self, event):
-        if event.is_directory:
+        if event.is_directory or event.event_type not in WATCHED_EVENTS:
             return
 
         path = event.dest_path if event.event_type == "moved" else event.src_path

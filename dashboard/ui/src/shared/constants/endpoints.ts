@@ -16,7 +16,6 @@ export const ENDPOINTS = {
   SET_IGNORE_RULE: "/conversations",
 
   GET_STATUS: "/status",
-  GET_ALL_FILES: "/files",
   GET_FILE: "/file",
   GET_CHUNKS: "/chunks",
   GET_CONTEXT: "/context",

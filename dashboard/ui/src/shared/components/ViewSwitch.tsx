@@ -1,6 +1,5 @@
 import {
   Database,
-  FileCode2,
   LayoutDashboard,
   Sparkles,
   SquareTerminal,
@@ -11,7 +10,6 @@ import type { WorkspaceView } from "@/shared/types/view";
 const VIEWS = [
   { value: "editor", label: "Editor", Icon: SquareTerminal },
   { value: "overview", label: "Overview", Icon: LayoutDashboard },
-  { value: "files", label: "Files", Icon: FileCode2 },
   { value: "explorer", label: "ChromaDB", Icon: Database },
   { value: "ask", label: "Ask", Icon: Sparkles },
   { value: "patch", label: "Patch", Icon: Wrench },

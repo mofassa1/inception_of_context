@@ -13,6 +13,11 @@ export function getRelativePath(targetPath: string, basePath: string): string {
     : targetPath;
 }
 
+export function joinPath(basePath: string, targetPath: string): string {
+  if (targetPath.startsWith("/")) return targetPath;
+  return basePath.replace(/\/+$/, "") + "/" + targetPath;
+}
+
 export function isPathInside(targetPath: string, basePath: string): boolean {
   return targetPath === basePath || targetPath.startsWith(basePath + "/");
 }

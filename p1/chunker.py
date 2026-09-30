@@ -127,6 +127,16 @@ def text_chunks(path, lines, source):
     return chunks
 
 
+def unique_ids(chunks):
+    # Two code samples in one file can carry the same name. ChromaDB refuses duplicate ids.
+    seen = {}
+    for chunk in chunks:
+        seen[chunk.id] = seen.get(chunk.id, 0) + 1
+        if seen[chunk.id] > 1:
+            chunk.id = f"{chunk.id}#{seen[chunk.id]}"
+    return chunks
+
+
 def chunk_file(path, source):
     lines = source.splitlines(keepends=True)
     if not lines:
@@ -134,5 +144,5 @@ def chunk_file(path, source):
     try:
         tree = ast.parse(source)
     except SyntaxError:
-        return text_chunks(path, lines, source)
-    return python_chunks(path, lines, tree)
+        return unique_ids(text_chunks(path, lines, source))
+    return unique_ids(python_chunks(path, lines, tree))

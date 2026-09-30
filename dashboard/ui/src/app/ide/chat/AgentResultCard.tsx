@@ -1,5 +1,5 @@
 import { FileDiff, Undo2 } from "lucide-react";
-import { getRelativePath } from "@/shared/lib/path";
+import { getRelativePath, joinPath } from "@/shared/lib/path";
 import type { PatchFileDTO, PatchLoopOutputDTO } from "@/shared/types/dto";
 
 const OP_LABEL: Record<PatchFileDTO["op"], string> = {
@@ -59,7 +59,7 @@ export function AgentResultCard({
             key={file.path}
             className="flex cursor-pointer items-center gap-2 border-none bg-transparent px-2.5 py-[5px] text-left [font:inherit] text-[12px] text-fg hover:bg-list-hover"
             title={file.path}
-            onClick={() => onOpenFile(file.path)}
+            onClick={() => onOpenFile(joinPath(root, file.path))}
           >
             <span
               className={

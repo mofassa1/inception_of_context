@@ -38,7 +38,6 @@ export function useStreamEvents() {
       const client = queryClientRef.current;
       client.invalidateQueries({ queryKey: [QUERY_KEYS.GET_FILE, event.path] });
       client.invalidateQueries({ queryKey: [QUERY_KEYS.LIST_FOLDER, getParentPath(event.path)] });
-      client.invalidateQueries({ queryKey: [QUERY_KEYS.GET_ALL_FILES] });
       client.invalidateQueries({ queryKey: [QUERY_KEYS.GET_STATUS] });
     };
 

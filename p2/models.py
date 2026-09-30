@@ -12,6 +12,8 @@ from pydantic import BaseModel
 ASK_MODEL = os.environ.get("ASK_MODEL", "qwen2.5:3b")
 CODE_MODEL = os.environ.get("CODE_MODEL", "qwen2.5-coder:3b")
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+# Measured: without a limit, one answer took 7.8 of the 20 cores and the machine crawled.
+MODEL_THREADS = int(os.environ.get("MODEL_THREADS", max(2, (os.cpu_count() or 4) // 3)))
 
 ANSWER_RULES = (
     "You answer questions about a code project. Use the code given as context. "
@@ -48,7 +50,7 @@ def missing_models():
 
 def chat_model(name, temperature):
     if name not in chat_models:
-        chat_models[name] = ChatOllama(model=name, temperature=temperature)
+        chat_models[name] = ChatOllama(model=name, temperature=temperature, num_thread=MODEL_THREADS)
     return chat_models[name]
 
 
