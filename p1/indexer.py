@@ -4,16 +4,24 @@
 import os
 import threading
 
-from sentence_transformers import SentenceTransformer
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
-
-from p1.chunker import chunk_file
-
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_CACHE = os.path.expanduser("~/.cache/huggingface")
+
+# huggingface_hub reads these when it is imported, so they have to be set first:
+# with the model already on disk, loading it must not call Hugging Face at all.
+if os.path.isdir(os.path.join(EMBEDDING_CACHE, "models--" + EMBEDDING_MODEL.replace("/", "--"))):
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
+from sentence_transformers import SentenceTransformer  # noqa: E402
+from watchdog.events import FileSystemEventHandler  # noqa: E402
+from watchdog.observers import Observer  # noqa: E402
+
+from p1.chunker import chunk_file  # noqa: E402
+
 EXCLUDED_DIRS = {"node_modules", "dist", "build", "venv", "__pycache__"}
 BINARY_SAMPLE_BYTES = 1024
+EMBED_BATCH = 256
 # Only real changes. Reading a file to index it also emits "opened" and "closed",
 # which would send the indexer straight back to the same file, forever.
 WATCHED_EVENTS = ("created", "modified", "moved", "deleted")
@@ -23,17 +31,7 @@ class Embedder:
     def __init__(self, model_name=EMBEDDING_MODEL, cache_folder=EMBEDDING_CACHE):
         self.model_name = model_name
         self.cache_folder = cache_folder
-        if self.is_downloaded():
-            # Everything is local: never let the library call Hugging Face again.
-            os.environ["HF_HUB_OFFLINE"] = "1"
-            os.environ["TRANSFORMERS_OFFLINE"] = "1"
         self.model = SentenceTransformer(model_name, cache_folder=cache_folder)
-        os.environ["HF_HUB_OFFLINE"] = "1"
-        os.environ["TRANSFORMERS_OFFLINE"] = "1"
-
-    def is_downloaded(self):
-        folder = "models--" + self.model_name.replace("/", "--")
-        return os.path.isdir(os.path.join(self.cache_folder, folder))
 
     def embed(self, texts):
         vectors = self.model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
@@ -73,19 +71,25 @@ class Indexer:
                 return False
         return True
 
-    def index_file(self, path):
+    def read_chunks(self, path):
         if not os.path.isfile(path) or is_binary(path):
-            return 0
+            return []
         try:
             with open(path, encoding="utf-8") as file:
                 source = file.read()
         except (OSError, UnicodeDecodeError):
-            return 0
+            return []
+        return chunk_file(path, source)
 
-        chunks = chunk_file(path, source)
-        stored_ids = {chunk["id"] for chunk in self.store.chunks_of_file(path)}
+    def store_chunks(self, chunks):
+        # One call for many chunks: the model and ChromaDB are both far cheaper in batches.
         if chunks:
             self.store.add_chunks(chunks, self.embedder.embed([chunk.content for chunk in chunks]))
+
+    def index_file(self, path):
+        chunks = self.read_chunks(path)
+        stored_ids = {chunk["id"] for chunk in self.store.chunks_of_file(path)}
+        self.store_chunks(chunks)
         gone_ids = stored_ids - {chunk.id for chunk in chunks}
         if gone_ids:
             self.store.delete_chunks(sorted(gone_ids))
@@ -96,7 +100,10 @@ class Indexer:
         self.report("deleted", path)
 
     def index_everything(self):
+        # The first walk goes through every file, so it embeds and writes by batch,
+        # not once per file. The watcher keeps using index_file for a single change.
         count = 0
+        batch = []
         for folder, folders, files in os.walk(self.target_path):
             folders[:] = [
                 name for name in folders if name not in EXCLUDED_DIRS and not name.startswith(".")
@@ -104,8 +111,16 @@ class Indexer:
             if os.path.realpath(folder).startswith(self.store.chroma_path):
                 folders[:] = []
                 continue
+
             for name in files:
-                count += self.index_file(os.path.join(folder, name))
+                batch.extend(self.read_chunks(os.path.join(folder, name)))
+                if len(batch) >= EMBED_BATCH:
+                    self.store_chunks(batch)
+                    count += len(batch)
+                    batch = []
+
+        self.store_chunks(batch)
+        count += len(batch)
         self.forget_gone_files()
         self.report("indexed", self.target_path, count)
         return count
