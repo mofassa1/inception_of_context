@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from p1.indexer import EMBEDDING_MODEL, Embedder, Indexer
 from p1.store import Store
 from p2 import models
-from p3.patch_loop import loop
+from p3.patch_loop import loop, validation_reason
 
 TARGET_PATH = os.path.realpath(os.environ["TARGET_PATH"])
 CHROMA_PATH = os.environ.get("CHROMA_PATH", "chroma_db")
@@ -403,10 +403,27 @@ def search_for_patch(query, k, ignored_paths):
     return [source.model_dump() for source in find_sources(query, k, ignored_paths)]
 
 
+def log_patch_loop(result):
+    # One line per attempt, so the reason of a rollback is in the log, not only in the window.
+    for attempt in result["attempts"]:
+        files = ", ".join(f"{file['path']} ({file['op']})" for file in attempt["files"]) or "no file"
+        if attempt["sanity"]["code"] != 0:
+            verdict = f"refused: {attempt['sanity']['message']}"
+        elif not attempt["applied"]:
+            verdict = f"not applied: {attempt['validation_output']}"
+        elif attempt["validation_passed"]:
+            verdict = "validation passed"
+        else:
+            verdict = f"validation failed: {validation_reason(attempt['validation_output'])}"
+        log.info(f"patch attempt {attempt['number']}: {files}, {verdict}")
+    outcome = "kept" if result["succeeded"] else "rolled back" if result["rolled_back"] else "nothing written"
+    log.info(f"patch loop {outcome} after {len(result['attempts'])} attempts: {result['summary']}")
+
+
 @app.post("/patch/loop", response_model=PatchLoopDTO)
 def post_patch_loop(body: PatchLoopInputDTO):
     try:
-        return loop(
+        result = loop(
             query=body.query,
             k=body.k,
             project_root=TARGET_PATH,
@@ -420,3 +437,5 @@ def post_patch_loop(body: PatchLoopInputDTO):
         raise HTTPException(status_code=400, detail=str(error))
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error))
+    log_patch_loop(result)
+    return result

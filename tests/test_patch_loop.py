@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from p3 import patch_loop
-from p3.patch_loop import loop
+from p3.patch_loop import loop, validation_reason
 
 SERVICE = """class NoteService:
     def __init__(self):
@@ -307,3 +307,106 @@ def test_a_crash_in_the_middle_still_restores(project, monkeypatch):
 def test_another_target_path_is_refused(project, tmp_path):
     with pytest.raises(ValueError):
         run_loop(project, [], target_path=str(tmp_path))
+
+
+def test_a_fenced_file_is_unwrapped(project):
+    fenced = make_patch(("hello.py", "create", "```python\nprint('hello')\n```\n"))
+    result, model = run_loop(project, [fenced])
+
+    assert result["succeeded"] is True
+    assert (project / "hello.py").read_text() == "print('hello')\n"
+
+
+def test_an_unchanged_duplicate_is_dropped(project):
+    patch = make_patch(
+        ("main.py", "modify", MAIN),
+        ("main.py", "modify", MAIN + "# done\n"),
+    )
+    result, model = run_loop(project, [patch])
+
+    assert result["succeeded"] is True
+    assert (project / "main.py").read_text() == MAIN + "# done\n"
+
+
+def test_a_red_attempt_is_shown_what_it_changed(project):
+    tidied = SERVICE.replace("self.notes = {}", "self.notes = dict()")
+    answers = [
+        make_patch(("notes/service.py", "modify", tidied + BROKEN_METHOD)),
+        make_patch(("notes/service.py", "modify", SERVICE + COUNT_METHOD)),
+    ]
+    result, model = run_loop(project, answers)
+
+    assert result["succeeded"] is True
+    assert "notes/service.py, line 3:         self.notes = {}" in model.prompts[1]
+    assert "self.notes = dict()" not in model.prompts[1]
+    assert "@@" not in model.prompts[1]
+
+
+def test_the_files_the_request_names_come_first(project):
+    (project / "notes" / "storage.py").write_text("class Storage:\n    def save(self):\n        return 1\n")
+    model = Model([make_patch(("notes/storage.py", "modify", "class Storage:\n    def save(self):\n        return 2\n"))])
+    loop(
+        "In notes/storage.py, make save return 2. Then look at notes.service too.",
+        5,
+        str(project),
+        str(project),
+        [],
+        search_of(project),
+        model.generate,
+    )
+
+    prompt = model.prompts[0]
+    assert "THE REQUEST NAMES THESE FILES, they come first below: notes/storage.py, notes/service.py" in prompt
+    assert prompt.index("FILE notes/storage.py>>>") < prompt.index("FILE notes/service.py>>>")
+    assert prompt.index("FILE notes/service.py>>>") < prompt.index("FILE main.py>>>")
+
+
+def test_a_requested_new_file_must_be_created(project):
+    answers = [
+        make_patch(("notes/__init__.py", "create", "")),
+        make_patch(("notes/archive.py", "create", "def archive():\n    return []\n")),
+    ]
+    model = Model(answers)
+    result = loop(
+        "Create notes/archive.py with an archive function.",
+        5,
+        str(project),
+        str(project),
+        [],
+        search_of(project),
+        model.generate,
+    )
+
+    assert result["attempts"][0]["sanity"]["code"] == 15
+    assert "notes/archive.py" in result["attempts"][0]["sanity"]["message"]
+    assert result["succeeded"] is True
+    assert result["files_touched"] == ["notes/archive.py"]
+    assert not (project / "notes" / "__init__.py").exists()
+
+
+def test_files_named_as_references_are_not_required(project):
+    model = Model([make_patch(("notes/service.py", "modify", SERVICE + COUNT_METHOD))])
+    result = loop(
+        "Add a count method to notes.service, the way main.py would use it.",
+        5,
+        str(project),
+        str(project),
+        [],
+        search_of(project),
+        model.generate,
+    )
+
+    assert result["succeeded"] is True
+
+
+def test_the_reason_is_the_real_import_error():
+    output = """test_export (unittest.loader._FailedTest.test_export) ... ERROR
+ERROR: test_export (unittest.loader._FailedTest.test_export)
+ImportError: Failed to import test module: test_export
+Traceback (most recent call last):
+  File "tests/test_export.py", line 2, in <module>
+ImportError: cannot import name 'TaskService' from 'tasks.export'
+FAILED (errors=1)
+failed with exit code 1"""
+
+    assert validation_reason(output) == "ImportError: cannot import name 'TaskService' from 'tasks.export'"
