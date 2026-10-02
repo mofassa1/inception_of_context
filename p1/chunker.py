@@ -7,7 +7,20 @@ import re
 from dataclasses import dataclass
 
 MAX_CHUNK_LINES = 40
-FUNCTION_PATTERN = re.compile(r"^\s*(?:def|function|func|fn)\s+(\w+)", re.MULTILINE)
+# A definition with a keyword, indented or not: def, function, async function, export
+# function, func, fn, class. [ \t]* and not \s*, or a match would start on a blank line before.
+FUNCTION_PATTERN = re.compile(
+    r"^[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?(?:async[ \t]+)?"
+    r"(?:def|function\*?|func|fn|class)[ \t]+(\w+)",
+    re.MULTILINE,
+)
+# A function given to a name at the top level: const api = async () =>, form.onsubmit =
+# function. Column 0 only, so an arrow function nested in another one does not split it.
+ASSIGNED_FUNCTION_PATTERN = re.compile(
+    r"^(?:export[ \t]+)?(?:(?:const|let|var)[ \t]+)?([A-Za-z_$][\w$.]*)[ \t]*=[ \t]*"
+    r"(?:async[ \t]+)?(?:function\b|\([^)\n]*\)[ \t]*=>|[A-Za-z_$][\w$]*[ \t]*=>)",
+    re.MULTILINE,
+)
 
 
 @dataclass
@@ -112,7 +125,18 @@ def module_chunks(path, lines, covered_lines):
 def text_chunks(path, lines, source):
     # No Python syntax: cut on the functions a regex can see, then on length.
     chunks = []
-    matches = list(FUNCTION_PATTERN.finditer(source))
+    starts = {}
+    for pattern in (FUNCTION_PATTERN, ASSIGNED_FUNCTION_PATTERN):
+        for match in pattern.finditer(source):
+            starts.setdefault(match.start(), match)
+    matches = [starts[start] for start in sorted(starts)]
+
+    # The lines before the first function: imports, constants, a header comment.
+    if matches:
+        first_line = source[: matches[0].start()].count("\n") + 1
+        if "".join(lines[: first_line - 1]).strip() != "":
+            chunks.extend(build_line_chunks(path, lines, "__module__", "module", 1, first_line - 1))
+
     for position, match in enumerate(matches):
         start_line = source[: match.start()].count("\n") + 1
         if position + 1 < len(matches):

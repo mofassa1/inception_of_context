@@ -67,9 +67,13 @@ class Store:
         return counts
 
     def chunks_of_file(self, path):
+        # In the order of the file: ChromaDB returns them in the order they were stored, and a
+        # chunk updated in place keeps its old rank. An outer chunk comes before the ones inside it.
         with self.lock:
             found = self.collection.get(where={"file": path}, include=["documents", "metadatas"])
-        return self.as_chunks(found)
+        chunks = self.as_chunks(found)
+        chunks.sort(key=lambda chunk: (chunk["metadata"]["start_line"], -chunk["metadata"]["end_line"]))
+        return chunks
 
     def page(self, offset, limit):
         with self.lock:
