@@ -1,0 +1,3 @@
+# The patch loop runs this after every patch. {files} is the list of files the patch changed.
+validation:
+  command: python check.py {files}
