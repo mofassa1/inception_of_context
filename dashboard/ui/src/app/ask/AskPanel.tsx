@@ -49,7 +49,7 @@ function AnswerSourceRow({
         {cited && (
           <span className="shrink-0 rounded-full bg-accent/22 px-1.5 py-px text-[10px] text-fg-strong">cited</span>
         )}
-        <span className="shrink-0 font-mono text-[11px] text-info" title="cosine distance — lower is closer">
+        <span className="shrink-0 font-mono text-[11px] text-info" title="cosine similarity — higher is closer">
           {source.score.toFixed(3)}
         </span>
         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -208,7 +208,7 @@ export function AskPanel() {
                       line {source.start_line}
                     </span>
                   </div>
-                  <span className="shrink-0 font-mono text-[11px] text-info" title="cosine distance — lower is closer">
+                  <span className="shrink-0 font-mono text-[11px] text-info" title="cosine similarity — higher is closer">
                     {source.score.toFixed(3)}
                   </span>
                 </div>
