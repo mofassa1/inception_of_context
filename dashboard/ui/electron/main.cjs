@@ -50,14 +50,16 @@ function resolveRealPath(rawPath) {
 }
 
 function parseLaunchPaths(commandLineArguments) {
-  const firstPathIndex = app.isPackaged ? 1 : 2;
+  // Skip the executable, the switches, and the app folder itself ("electron . <folder>"):
+  // a Chromium switch before "." would shift any count of positions.
+  const appPath = resolveRealPath(app.getAppPath());
   const foundPaths = [];
 
-  for (const argument of commandLineArguments.slice(firstPathIndex)) {
+  for (const argument of commandLineArguments.slice(1)) {
     if (argument.startsWith("-")) continue;
 
     const realPath = resolveRealPath(argument);
-    if (!realPath) continue;
+    if (!realPath || realPath === appPath) continue;
 
     try {
       foundPaths.push({ path: realPath, isDir: fs.statSync(realPath).isDirectory() });

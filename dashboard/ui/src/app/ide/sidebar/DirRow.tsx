@@ -81,6 +81,7 @@ export function DirRow({
       <div
         className="flex h-[22px] cursor-pointer items-center gap-[5px] overflow-hidden pr-3 text-[13px] text-ellipsis whitespace-nowrap text-fg select-none hover:bg-list-hover"
         style={{ paddingLeft: TREE_BASE_PADDING_PX + depth * TREE_INDENT_PX }}
+        aria-expanded={open}
         onClick={() => setOpen((isOpen) => !isOpen)}
         onContextMenu={openMenu}
       >

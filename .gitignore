@@ -15,6 +15,9 @@ models.mk
 # One folder of logs per `make FOLDER=<folder>` run.
 .logs/
 
+# make showcase: the copy of demo/ it patches, its videos, chapters and test results.
+.showcase/
+
 # --- Python ---
 .venv/
 venv/

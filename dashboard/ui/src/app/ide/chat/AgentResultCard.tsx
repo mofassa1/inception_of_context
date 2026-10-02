@@ -28,7 +28,7 @@ export function AgentResultCard({
 
   if (!patchLoopOutput.succeeded) {
     return (
-      <div className="mt-2 overflow-hidden rounded-md border border-border bg-input-bg">
+      <div role="group" aria-label="Agent result" className="mt-2 overflow-hidden rounded-md border border-border bg-input-bg">
         <div className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5 text-[11px] text-fg-dim">
           <Undo2 size={12} />
           <span>
@@ -45,7 +45,7 @@ export function AgentResultCard({
   const files = lastAttempt?.files ?? [];
 
   return (
-    <div className="mt-2 overflow-hidden rounded-md border border-border bg-input-bg">
+    <div role="group" aria-label="Agent result" className="mt-2 overflow-hidden rounded-md border border-border bg-input-bg">
       <div className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5 text-[11px] text-fg-dim">
         <FileDiff size={12} />
         <span>

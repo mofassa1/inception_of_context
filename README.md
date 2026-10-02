@@ -25,7 +25,7 @@ make logs             # the last run again, with colors
 |---|---|
 | **Editor** | file tree, tabs, an editor, and the chat with the agent beside it |
 | **Overview** | what is indexed, and what the watcher does, live |
-| **Explorer** | every chunk in the store, page by page |
+| **ChromaDB** | every chunk in the store, page by page |
 | **Ask** | a question, the answer, and the chunks it came from |
 | **Patch** | run the patch loop and read every attempt |
 | **the picker** | in the chat: switches the model of Ask or of Agent, and pulls a new one |
@@ -35,9 +35,10 @@ make logs             # the last run again, with colors
 | `make install` | models, `.venv`, `npm install` |
 | `make FOLDER=<folder>` | starts the three parts and the window |
 | `make logs` | the last log again |
+| `make showcase` | Playwright plays every feature on a copy of `demo/`, at a human pace |
 | `make tests` | `tests/test_index.py`, `tests/test_patch_loop.py` |
 | `make clean` | `.venv`, `node_modules`, `dist`, caches |
-| `make fclean` | `clean` plus `chroma_db`, `sessions.sqlite3`, `models.mk`, `.logs` |
+| `make fclean` | `clean` plus `chroma_db`, `dashboard/sessions.sqlite3`, `models.mk`, `.logs`, `.showcase` |
 
 ## The map
 
@@ -45,7 +46,7 @@ make logs             # the last run again, with colors
 flowchart LR
     W["Electron window<br/>dashboard/ui"] -->|HTTP| S["bridge :8001<br/>dashboard/bridge.py"]
     S -->|HTTP| A["AI agent :8000<br/>p2/api.py"]
-    S --- DB[("sessions.sqlite3<br/>conversations, chats, ignore rules")]
+    S --- DB[("dashboard/sessions.sqlite3<br/>conversations, chats, ignore rules")]
     A --- C[("chroma_db<br/>one collection per folder")]
     A -->|prompts| O["Ollama :11434<br/>ask model, code model"]
     A -->|reads and watches| F["your folder<br/>FOLDER=..."]
@@ -62,7 +63,7 @@ p3/         the patch loop: generate, check, apply, validate, roll back
 dashboard/  bridge.py (:8001) and ui/ (React + Electron)
 setup/      pick the models, then run everything (run.py)
 tests/      the index and the patch loop
-demo/       a tiny project to point FOLDER at
+demo/       Taskboard, a tiny full-stack app to point FOLDER at
 ```
 
 ## How a run starts
@@ -89,7 +90,7 @@ points at the newest one:
 
 ```
 ai-agent:  17:04:11 INFO    indexed 629 chunks
-server:    17:04:12 WARNING 127.0.0.1 - "GET /file?path=gone.py" 404 Not Found
+bridge:    17:04:12 WARNING 127.0.0.1 - "GET /file?path=gone.py" 404 Not Found
 run:       17:04:12 INFO    everything is running, close the window or press Ctrl+C to stop
 ```
 
@@ -118,7 +119,7 @@ flowchart TD
 
 | Fact | Value |
 |---|---|
-| A chunk | one function or class in Python, otherwise 40 lines |
+| A chunk | one function or class in Python (its AST); in other files, one per function, class or top-level arrow function, plus the lines before the first one; 40 lines at most |
 | Its id | `path::qualified_name`, made unique when a name repeats |
 | Embedding | `sentence-transformers/all-MiniLM-L6-v2`, offline once cached |
 | Distance | cosine, one collection per folder (`codebase_<sha256(path)[:16]>`) |
@@ -252,7 +253,7 @@ erDiagram
         TEXT conversation_id FK
         TEXT role "user or assistant"
         TEXT content
-        TEXT mode "ask or patch"
+        TEXT mode "ask or agent"
         TEXT sources "JSON, as it was that day"
         REAL created_at
     }
@@ -273,7 +274,7 @@ search and refused by the patch loop, for that conversation only. `node_modules`
 ```mermaid
 flowchart TD
     Q["POST /patch/loop"] --> SE["search the k best chunks"]
-    SE --> PR["prompt: the file list,<br/>3 whole files, 6000 characters"]
+    SE --> PR["prompt: the files the request names first,<br/>3 whole files, 6000 characters"]
     PR --> G["the code model answers<br/>a summary and a list of files"]
     G --> CK{"sanity checks"}
     CK -->|"refused"| FB["the reason goes back to the model"]
@@ -288,8 +289,24 @@ flowchart TD
     RB --> N
 ```
 
-The model never sees a diff: it is given whole files and answers whole files. A patch is written
-to `path.ioc.tmp` and moved with `os.replace`, so a file is never half written.
+The model is given whole files and answers whole files, never a diff. A patch is written to
+`path.ioc.tmp` and moved with `os.replace`, so a file is never half written.
+
+A 3B model has habits the loop works around:
+
+- **It edits the first file it is shown.** The files the request names (`tasks/storage.py`, or
+  `tasks.storage`) come first in the prompt, even when the search ranked another one higher.
+- **It "tidies" lines nobody asked about**, and the tests catch it. The feedback of a red attempt
+  carries the test output **and the original lines that attempt removed or changed**, with their
+  line numbers, so the next attempt can put them back. They are plain lines, not a diff: shown a
+  diff, a small model answers with one.
+- **It wraps a file in a ```` ``` ```` block, or lists a file twice.** The block is unwrapped, and
+  a duplicate entry that changes nothing is dropped, before the checks.
+- **It can loop and never stop.** A patch answer is capped at 2048 tokens, a chat answer at
+  1024, so a stuck model cannot hang a request; a cut answer is an invalid patch (14).
+
+Every attempt is logged on one line, with the reason it failed: the last exception of the
+validation output, such as `ImportError: cannot import name 'TaskService' from 'tasks.export'`.
 
 **The refusals.** A patch that hits one of these is never applied; the reason is sent back to the
 model as feedback for the next attempt.
@@ -310,6 +327,7 @@ model as feedback for the next attempt.
 | 12 | the same path is in the patch twice |
 | 13 | the file to modify is not a text file |
 | 14 | the model answer is not a valid patch |
+| 15 | the request asks to create a file (`Create tests/test_x.py`) and the patch does not create it |
 
 **The validation.** Put an `ioc.config.yml` at the root of the folder you open:
 
@@ -380,7 +398,70 @@ of the time.
 | validation command | `ioc.config.yml` in the folder you open | `python -m py_compile {files}` |
 
 `MODEL_THREADS` exists because Ollama took 8 of 20 cores for a single answer and the machine
-crawled.
+crawled. More threads do not make it faster: on an i7-12700, 6, 8 and 12 threads all write about
+10 tokens/s, a speed set by the memory, not by the cores. Fewer than 6 only slows down the reading
+of the prompt.
+
+## The showcase
+
+`make showcase` is one take through every feature, for a screen recording: Playwright opens the
+window and uses it like a person would, on a fresh copy of `demo/` in `.showcase/demo`.
+
+```mermaid
+flowchart LR
+    C["copy demo/ to .showcase/demo"] --> R["setup/run.py --showcase<br/>AI agent, bridge"]
+    R --> P["npx playwright test<br/>dashboard/ui/e2e"]
+    P --> W["the window, fullscreen"]
+    P --> V[".showcase/videos/*.mkv, ffmpeg x11grab<br/>chapters.json"]
+    V --> X["setup/cut_video.py"]
+    X --> M["*.mp4, the waits sped up"]
+```
+
+| Scene | What it shows |
+|---|---|
+| 01–02 | every folder opened, a file and its chunk bands, the overlay switched off and on |
+| 03 | Overview: chunks, models, every indexed file |
+| 04 | an edit in `models.py`, autosaved, re-indexed live |
+| 05 | a file created, written, renamed, deleted |
+| 06 | the ChromaDB explorer, page by page |
+| 07 | Retrieve with k = 8, then Ask LLM and its sources |
+| 08 | the chat: three questions, the sources, a file opened from one |
+| 09 | models: `qwen2.5:0.5b` downloaded from the picker, the same question to it, back to the 3B |
+| 10 | Agent mode: `tasks/export.py`, then its unit test, both validated by the test suite |
+| 11 | the Patch tab: `TaskStore.count()` added to an existing file, every attempt, the JSON, the output |
+| 12 | `tests/` ignored, a patch that breaks a test, the rollback, the first conversation again |
+| 13 | the live activity of the whole take, then the closing card |
+
+Scene 09 removes `qwen2.5:0.5b` from Ollama before the take, when the project does not run on
+it, so the download shows every time; the take keeps it. Whatever happens, the models of
+`models.mk` are put back at the end of the scene.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `SHOWCASE_SPEED` | `1` | `1.5` is faster, `0.8` slower: every pause, keystroke and mouse move |
+| `SHOWCASE_RECORD` | `0` | `1` films the screen (X11, ffmpeg `x11grab`), then cuts it into an `.mp4` in `.showcase/videos` |
+| `SHOWCASE_WAIT_SECONDS` | `6` | in the `.mp4`, how long a wait for a model lasts at most |
+| `SHOWCASE_HEADLESS` | `0` | `1` plays it off-screen, a dry run (it cannot be recorded) |
+| `SHOWCASE_SNAPSHOTS` | `0` | `1` saves a screenshot at every caption in `.showcase/snapshots` |
+| `SHOWCASE_CAPTIONS` | `1` | `0` hides the captions |
+| `SHOWCASE_TYPOS` | `1` | `0` types without the odd fixed typo |
+| `SHOWCASE_ROLLBACK` | `1` | `0` skips scene 12, the longest |
+| `SHOWCASE_SCENES` | `1-13` | `9-11` or `4,8` rehearses some scenes only; the cards always play |
+| `SHOWCASE_PULL_MODEL` | `qwen2.5:0.5b` | the model scene 09 downloads |
+| `SHOWCASE_ZOOM` | `1.25` | the zoom of the window, so the text reads on a phone |
+| `SHOWCASE_SIZE` | `1920x1080` | the size of the window when headless; a recording is the size of the screen |
+| `SHOWCASE_SEED` | `42` | the same seed moves the same way at every take |
+
+```bash
+SHOWCASE_RECORD=1 make showcase                        # plays fullscreen, films it, cuts the .mp4
+SHOWCASE_HEADLESS=1 SHOWCASE_SCENES=1-8 make showcase  # a quick off-screen rehearsal
+```
+
+The answers and the patches are real, so a take is as long as the models are slow. Each wait
+for a model is shown with a running clock and written to `.showcase/chapters.json`; the cut
+(`setup/cut_video.py`, through the ffmpeg of `imageio-ffmpeg`) speeds every wait up so it lasts
+a few seconds, while the clock keeps showing the real time. The rest plays at its real pace.
+The run ends with the film, and `make showcase` fails if a scene did not see what it expected.
 
 ## When it does not work
 
@@ -390,6 +471,7 @@ crawled.
 | `<model> is not pulled or Ollama is not running` | `ollama serve`, then `make install-models` |
 | the first start hangs on the embedding model | it is downloaded once; after that every start is offline |
 | answers are slow | the folder is large, or another run holds the cores |
+| a patch takes minutes | on a CPU an attempt takes 1–2 min, and a red one is retried up to 3 times; the log says why each failed |
 | the window opens empty | the UI was not built: `make FOLDER=<folder>` builds it when it changed |
 
 ## The subject

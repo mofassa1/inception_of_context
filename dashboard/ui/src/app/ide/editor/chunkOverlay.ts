@@ -25,7 +25,12 @@ function hueFor(index: number): string {
   return CHUNK_HUES[index % CHUNK_HUES.length];
 }
 
-function withDepth(chunks: ChunkDTO[]): PlacedChunk[] {
+function withDepth(unsorted: ChunkDTO[]): PlacedChunk[] {
+  // Numbered in the order of the file, whatever order the index sent them in.
+  const chunks = [...unsorted].sort(
+    (left, right) => left.start_line - right.start_line || right.end_line - left.end_line,
+  );
+
   return chunks.map((chunk, index) => {
     const depth = chunks.filter(
       (other) =>

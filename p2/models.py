@@ -20,6 +20,11 @@ REPOSITORY_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_FILE = os.path.join(REPOSITORY_ROOT, "models.mk")
 # Measured: without a limit, one answer took 7.8 of the 20 cores and the machine crawled.
 MODEL_THREADS = int(os.environ.get("MODEL_THREADS", max(2, (os.cpu_count() or 4) // 3)))
+# Seen: a 3B model writing a patch can loop and never stop, the CPU flat out for minutes.
+# A patch holds at most the 6000 characters of p3's context, about 2000 tokens: past that,
+# the answer is cut, cannot be read, and the loop goes on to its next attempt.
+PATCH_MAX_TOKENS = 2048
+ANSWER_MAX_TOKENS = 1024
 
 ANSWER_RULES = (
     "You answer questions about a code project. Use the code given as context. "
@@ -121,10 +126,13 @@ def pull_model(name):
         }
 
 
-def chat_model(name, temperature):
-    if name not in chat_models:
-        chat_models[name] = ChatOllama(model=name, temperature=temperature, num_thread=MODEL_THREADS)
-    return chat_models[name]
+def chat_model(name, temperature, max_tokens):
+    key = (name, temperature, max_tokens)
+    if key not in chat_models:
+        chat_models[key] = ChatOllama(
+            model=name, temperature=temperature, num_thread=MODEL_THREADS, num_predict=max_tokens
+        )
+    return chat_models[key]
 
 
 def stream_answer(question, context, history):
@@ -133,14 +141,14 @@ def stream_answer(question, context, history):
         messages.append(HumanMessage(content=f"{role}: {content}"))
     messages.append(HumanMessage(content=f"Code:\n{context}\n\nQuestion: {question}"))
 
-    for piece in chat_model(ASK_MODEL, 0.2).stream(messages):
+    for piece in chat_model(ASK_MODEL, 0.2, ANSWER_MAX_TOKENS).stream(messages):
         if piece.content:
             yield piece.content
 
 
 def generate_patch(prompt):
     answer = (
-        chat_model(CODE_MODEL, 0.0)
+        chat_model(CODE_MODEL, 0.0, PATCH_MAX_TOKENS)
         .with_structured_output(CodePatch)
         .invoke([HumanMessage(content=prompt)])
     )

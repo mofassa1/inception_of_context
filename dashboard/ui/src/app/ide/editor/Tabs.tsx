@@ -33,6 +33,8 @@ export function Tabs({
             <FileIcon name={name} />
             <span className="truncate">{name}</span>
             <span
+              role="button"
+              aria-label={`Close tab ${name}`}
               className={
                 "flex size-5 shrink-0 items-center justify-center rounded hover:bg-white/10 hover:text-fg-strong " +
                 (tab.path === activePath ? "text-fg" : "text-fg-dim")

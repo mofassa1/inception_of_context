@@ -1,7 +1,8 @@
 """Starts the project and keeps its log: the AI agent, the bridge, the window.
 
-    python setup/run.py <folder>    start everything on that folder
-    python setup/run.py --logs      show the log of the last run again
+    python setup/run.py <folder>                start everything on that folder
+    python setup/run.py <folder> --showcase     the same, but Playwright drives the window
+    python setup/run.py --logs                  show the log of the last run again
 
 Every line of every part goes to .logs/<date_time>.log as
 "<part>: <time> <LEVEL> <message>", and to this terminal with colors.
@@ -46,7 +47,7 @@ NOISE = [
 ]
 LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 LEVEL_COLORS = {"DEBUG": "90", "INFO": "32", "WARNING": "33", "ERROR": "31", "CRITICAL": "31"}
-PART_COLORS = {"run": "35", "ai-agent": "36", "bridge": "96", "ui": "94"}
+PART_COLORS = {"run": "35", "ai-agent": "36", "bridge": "96", "ui": "94", "showcase": "93"}
 
 
 # ---------------------------------------------------------------------------
@@ -284,7 +285,7 @@ def open_log(folder):
     return log
 
 
-def start_everything(folder, models, log, parts):
+def start_everything(folder, models, log, parts, showcase):
     # Every part goes into parts as soon as it starts, so a Ctrl+C in the middle still stops it.
     environment = os.environ.copy()
     environment["PYTHONPATH"] = f"{REPO}:{REPO / 'p1'}"
@@ -315,15 +316,20 @@ def start_everything(folder, models, log, parts):
     window_environment = dict(environment)
     # Set by some terminals: it would start Electron as plain Node, with no window.
     window_environment.pop("ELECTRON_RUN_AS_NODE", None)
-    parts.append(
-        Part(
-            "ui",
-            ["npx", "electron", ".", str(folder)],
-            log,
-            cwd=REPO / "dashboard/ui",
-            env=window_environment,
-        )
-    )
+    if showcase:
+        # Playwright opens the window itself, and the run ends with the film.
+        window_environment["SHOWCASE_FOLDER"] = str(folder)
+        try:
+            import imageio_ffmpeg
+
+            # SHOWCASE_RECORD films the screen with this ffmpeg.
+            window_environment["SHOWCASE_FFMPEG"] = imageio_ffmpeg.get_ffmpeg_exe()
+        except ImportError:
+            pass
+        name, command = "showcase", ["npx", "playwright", "test", "--config", "e2e/playwright.config.ts"]
+    else:
+        name, command = "ui", ["npx", "electron", ".", str(folder)]
+    parts.append(Part(name, command, log, cwd=REPO / "dashboard/ui", env=window_environment))
     log.write("run", "INFO", "everything is running, close the window or press Ctrl+C to stop")
     return True
 
@@ -333,6 +339,7 @@ def stop_asked(number, frame):
 
 
 def wait_for_the_end(parts, log):
+    # The exit code of the part that stopped first, or 130 when the stop was asked.
     try:
         while True:
             for part in parts:
@@ -340,10 +347,11 @@ def wait_for_the_end(parts, log):
                     code = part.process.returncode
                     level = "INFO" if code == 0 else "ERROR"
                     log.write("run", level, f"{part.name} stopped (exit code {code})")
-                    return
+                    return code
             time.sleep(0.5)
     except KeyboardInterrupt:
         log.write("run", "INFO", "stop asked")
+        return 130
 
 
 def stop_everything(parts, log):
@@ -401,13 +409,15 @@ def show_last_log():
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1].strip() == "":
-        print("usage: make FOLDER=<folder>")
-        return 1
-    if sys.argv[1] == "--logs":
+    arguments = sys.argv[1:]
+    if arguments == ["--logs"]:
         return show_last_log()
+    showcase = arguments[1:] == ["--showcase"]
+    if len(arguments) not in (1, 2) or arguments[0].strip() == "" or (len(arguments) == 2 and not showcase):
+        print("usage: make FOLDER=<folder>, or make showcase")
+        return 1
 
-    folder = Path(sys.argv[1]).resolve()
+    folder = Path(arguments[0]).resolve()
     models = read_models()
     problem = checks_fail(folder, models)
     if problem:
@@ -429,14 +439,17 @@ def main():
     signal.signal(signal.SIGHUP, stop_asked)
 
     parts = []
+    exit_code = 1
     try:
-        if start_everything(folder, models, log, parts):
-            wait_for_the_end(parts, log)
+        if start_everything(folder, models, log, parts, showcase):
+            exit_code = wait_for_the_end(parts, log)
     except KeyboardInterrupt:
         log.write("run", "INFO", "stop asked")
+        exit_code = 130
     finally:
         stop_everything(parts, log)
-    return 0
+    # A normal run ends when the window is closed; a showcase passes only if the film did.
+    return exit_code if showcase else 0
 
 
 if __name__ == "__main__":

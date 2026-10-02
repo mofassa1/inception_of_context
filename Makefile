@@ -1,4 +1,4 @@
-.PHONY: all logs install install-models install-python install-dashboard tests clean fclean
+.PHONY: all logs showcase install install-models install-python install-dashboard tests clean fclean
 
 export UV_CACHE_DIR ?= $(if $(wildcard /goinfre/$(USER)),/goinfre/$(USER)/.cache/uv,$(HOME)/.cache/uv)
 export UV_LINK_MODE := copy
@@ -41,6 +41,18 @@ $(DASHBOARD_BUILD): $(DASHBOARD_SOURCES)
 logs:
 	@$(PYTHON) setup/run.py --logs
 
+# make showcase: Playwright plays every feature of the app on a fresh copy of demo/,
+#   at a human pace. The copy is new at every take, so the patches of the last take are gone.
+#   SHOWCASE_RECORD=1 records it and cuts it into an .mp4; the other settings: README.
+SHOWCASE_FOLDER := .showcase/demo
+showcase:
+	@$(MAKE) --no-print-directory $(DASHBOARD_BUILD)
+	@rm -rf $(SHOWCASE_FOLDER) && mkdir -p $(dir $(SHOWCASE_FOLDER))
+	@cp -r demo $(SHOWCASE_FOLDER)
+	@find $(SHOWCASE_FOLDER) -name __pycache__ -type d -prune -exec rm -rf {} +
+	@$(PYTHON) setup/run.py "$(abspath $(SHOWCASE_FOLDER))" --showcase
+	@if [ "$$SHOWCASE_RECORD" = 1 ]; then $(PYTHON) setup/cut_video.py; fi
+
 # make install: pick and pull the models first, then install the packages
 install: install-models install-python install-dashboard
 
@@ -62,6 +74,6 @@ clean:
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 
 fclean: clean
-	rm -rf chroma_db sessions.sqlite3 $(MODELS_FILE) .logs
+	rm -rf chroma_db dashboard/sessions.sqlite3 $(MODELS_FILE) .logs .showcase
 	@docker ps -aq --filter label=$(DOCKER_PROJECT) 2>/dev/null | xargs -r docker rm -f
 	@docker volume ls -q --filter label=$(DOCKER_PROJECT) 2>/dev/null | xargs -r docker volume rm

@@ -5,7 +5,9 @@
 # The loop gets its search and its model as arguments, so this file depends on nothing else.
 
 import ast
+import difflib
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -22,6 +24,7 @@ CONTEXT_FILES = 3
 CONTEXT_CHARACTERS = 6000
 LISTED_FILES = 60
 FEEDBACK_CHARACTERS = 1500
+CHANGED_LINES_CHARACTERS = 2500
 OUTPUT_CHARACTERS = 4000
 TIMEOUT_SECONDS = 120
 TEMPORARY_SUFFIX = ".ioc.tmp"
@@ -45,6 +48,7 @@ IGNORED_PATH = 11
 SAME_PATH_TWICE = 12
 NOT_TEXT = 13
 INVALID_ANSWER = 14
+NOT_CREATED = 15
 
 SANITY_MESSAGES = {
     OK: "ok",
@@ -59,16 +63,17 @@ SANITY_MESSAGES = {
     MISSING_FILE: "'modify' or 'delete' on a file that does not exist",
     OUTSIDE_PROJECT: "a path is outside the project",
     IGNORED_PATH: "a path is ignored",
-    SAME_PATH_TWICE: "the same path is in the patch twice",
+    SAME_PATH_TWICE: "the same path is in the patch twice: give each file once, with all its changes",
     NOT_TEXT: "the file to modify is not a text file",
     INVALID_ANSWER: "the model answer is not a valid patch",
+    NOT_CREATED: "the request asks to create a file the patch does not create",
 }
 
 PROMPT = """You change a code project so it does what the user asks.
 
 USER REQUEST:
 {query}
-
+{named}
 PROJECT FILES:
 {file_list}
 
@@ -94,6 +99,14 @@ Previous summary: {summary}
 Previous files: {files}
 Why it failed:
 {reason}
+{changes}"""
+
+CHANGES = """These lines of the original files were removed or changed by your previous attempt.
+Put back, exactly as written here, every one the request does not ask to change:
+{lines}
+"""
+
+NAMED = """THE REQUEST NAMES THESE FILES, they come first below: {files}
 """
 
 loop_lock = threading.Lock()
@@ -129,10 +142,47 @@ def is_ignored(full_path, ignored_paths):
 # ---------------------------------------------------------------------------
 
 
-def build_context(project_root, sources, ignored_paths):
+def named_files(project_root, query):
+    # The files a request writes out, as a path ("tasks/storage.py") or a module ("tasks.storage").
+    named = []
+    for word in re.findall(r"[\w./-]+", query):
+        word = word.strip("./")
+        candidates = [word]
+        if "/" not in word and "." in word and not os.path.splitext(word)[1] in (".py", ".md"):
+            candidates.append(word.replace(".", "/") + ".py")
+        for candidate in candidates:
+            full_path = resolve_in_project(project_root, candidate) if candidate else None
+            if full_path and os.path.isfile(full_path) and full_path not in named:
+                named.append(full_path)
+    return named
+
+
+FILE_EXTENSIONS = {
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".md", ".txt", ".json",
+    ".yml", ".yaml", ".toml", ".cfg", ".ini", ".sh",
+}
+
+
+def requested_new_files(project_root, query):
+    # A path the request writes out that does not exist yet can only mean "create it":
+    # "Create tests/test_export.py". A module name ("tasks.export") is only a reference.
+    requested = []
+    for word in re.findall(r"[\w./-]+", query):
+        word = word.strip("./")
+        if os.path.splitext(word)[1] not in FILE_EXTENSIONS:
+            continue
+        full_path = resolve_in_project(project_root, word)
+        if full_path and not os.path.lexists(full_path) and full_path not in requested:
+            requested.append(full_path)
+    return requested
+
+
+def build_context(project_root, sources, ignored_paths, named=()):
+    # The files the request names come first: a small model edits the first file it is shown,
+    # even when the search ranked another file higher.
     files = []
     characters_left = CONTEXT_CHARACTERS
-    for source in sources:
+    for source in [{"file": path} for path in named] + list(sources):
         full_path = resolve_in_project(project_root, source["file"])
         if full_path is None or is_ignored(full_path, ignored_paths):
             continue
@@ -150,14 +200,16 @@ def build_context(project_root, sources, ignored_paths):
     return files
 
 
-def build_prompt(project_root, query, project_files, context_files, feedback):
+def build_prompt(project_root, query, project_files, context_files, feedback, named=()):
     blocks = []
     for full_path, content in context_files:
         name = relative_to_project(project_root, full_path)
         blocks.append(f"{MARKER} FILE {name}>>>\n{content.rstrip()}\n{MARKER} END>>>")
 
+    named_names = ", ".join(relative_to_project(project_root, path) for path in named)
     return PROMPT.format(
         query=query,
+        named=NAMED.format(files=named_names) if named_names else "",
         file_list="\n".join(project_files) or "(nothing indexed yet)",
         file_blocks="\n\n".join(blocks) or "(no file found for this request)",
         feedback=feedback,
@@ -166,13 +218,72 @@ def build_prompt(project_root, query, project_files, context_files, feedback):
     )
 
 
-def build_feedback(patch, reason):
+def build_feedback(patch, reason, changed_lines=""):
     files = "none"
     summary = "none"
     if patch is not None:
         summary = patch.summary
         files = ", ".join(f"{file.path} ({file.op})" for file in patch.files) or "none"
-    return FEEDBACK.format(summary=summary, files=files, reason=reason[-FEEDBACK_CHARACTERS:])
+    changes = CHANGES.format(lines=changed_lines[:CHANGED_LINES_CHARACTERS]) if changed_lines else ""
+    return FEEDBACK.format(
+        summary=summary, files=files, reason=reason[-FEEDBACK_CHARACTERS:], changes=changes
+    )
+
+
+def changed_lines(project_root, snapshot, changes):
+    # A small model rewriting a whole file also "tidies" lines nobody asked about. Listing the
+    # original lines it lost lets the next attempt put them back. Plain lines, not a diff:
+    # shown a diff, a small model answers with one.
+    found = []
+    for full_path, op, content in changes:
+        state = snapshot["files"].get(full_path)
+        if op != "modify" or state is None:
+            continue
+        try:
+            before = state["content"].decode("utf-8").splitlines()
+        except UnicodeDecodeError:
+            continue
+        name = relative_to_project(project_root, full_path)
+        matcher = difflib.SequenceMatcher(a=before, b=content.splitlines(), autojunk=False)
+        for tag, first, last, _, _ in matcher.get_opcodes():
+            if tag in ("replace", "delete"):
+                for number in range(first, last):
+                    if before[number].strip():
+                        found.append(f"{name}, line {number + 1}: {before[number]}")
+    return "\n".join(found)
+
+
+# ---------------------------------------------------------------------------
+# What the model answered, cleaned of the habits of small models
+# ---------------------------------------------------------------------------
+
+
+def without_fences(content):
+    # A file wrapped in a markdown code block: keep what is inside.
+    lines = content.strip("\n").splitlines()
+    if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]) + "\n"
+    return content
+
+
+def clean_patch(patch, project_root):
+    for file in patch.files:
+        file.content = without_fences(file.content)
+
+    # The same path twice, once as it already is: that entry changes nothing, drop it.
+    paths = [resolve_in_project(project_root, file.path) for file in patch.files]
+    kept = []
+    for file, full_path in zip(patch.files, paths):
+        if full_path is not None and paths.count(full_path) > 1 and file.op == "modify":
+            try:
+                with open(full_path, encoding="utf-8") as opened:
+                    if opened.read() == file.content:
+                        continue
+            except (OSError, UnicodeDecodeError):
+                pass
+        kept.append(file)
+    patch.files = kept
+    return patch
 
 
 # ---------------------------------------------------------------------------
@@ -264,12 +375,18 @@ def check_file(file, full_path):
     return refusal(OK)
 
 
-def check_patch(patch, project_root, ignored_paths):
+def check_patch(patch, project_root, ignored_paths, to_create=()):
     files = [file for file in patch.files if file.op != "noop"]
     if not files:
         return refusal(NO_CHANGE_NEEDED) if patch.files else refusal(NO_FILE)
     if len(files) > MAX_FILES:
         return refusal(TOO_MANY_FILES)
+
+    # A patch that passes the tests without the file it was asked for is not a success.
+    created = [resolve_in_project(project_root, file.path) for file in files if file.op == "create"]
+    for full_path in to_create:
+        if full_path not in created:
+            return refusal(NOT_CREATED, relative_to_project(project_root, full_path))
 
     seen_paths = []
     for file in files:
@@ -412,6 +529,23 @@ def run_command(project_root, command):
             return None, output
 
 
+def validation_reason(output):
+    # The line that says why: the last exception message (the first ones of a traceback are
+    # often "Failed to import test module"), then a failed test, then the last line.
+    lines = [line.strip() for line in output.strip().splitlines()]
+    exceptions = [
+        line
+        for line in lines
+        if re.match(r"^\w*(Error|Exception): ", line) and "Failed to import test module" not in line
+    ]
+    if exceptions:
+        return exceptions[-1]
+    failures = [line for line in lines if re.match(r"^(FAIL|ERROR): ", line)]
+    if failures:
+        return failures[0]
+    return lines[-1] if lines else ""
+
+
 def run_validation(project_root, command, changed_files):
     note = ""
     if command is None:
@@ -490,6 +624,10 @@ def run_attempts(query, k, project_root, ignored_paths, search, generate, report
     command = read_validation_command(project_root)
     snapshot = {"files": {}, "folders": []}
     project_files = []
+    named = [path for path in named_files(project_root, query) if not is_ignored(path, ignored_paths)]
+    to_create = [
+        path for path in requested_new_files(project_root, query) if not is_ignored(path, ignored_paths)
+    ]
     attempts = []
     feedback = ""
     succeeded = False
@@ -497,21 +635,21 @@ def run_attempts(query, k, project_root, ignored_paths, search, generate, report
     try:
         for number in range(1, MAX_ATTEMPTS + 1):
             sources = search(query, k, ignored_paths)
-            context_files = build_context(project_root, sources, ignored_paths)
+            context_files = build_context(project_root, sources, ignored_paths, named)
             project_files = sorted(
                 {relative_to_project(project_root, path) for path, _ in context_files}
             )
-            prompt = build_prompt(project_root, query, project_files, context_files, feedback)
+            prompt = build_prompt(project_root, query, project_files, context_files, feedback, named)
 
             try:
-                patch = generate(prompt)
+                patch = clean_patch(generate(prompt), project_root)
             except Exception as error:
                 attempts.append(new_attempt(number, "", [], refusal(INVALID_ANSWER, str(error))))
                 feedback = build_feedback(None, f"your answer could not be read: {error}")
                 report("error", project_root, 0)
                 continue
 
-            code, message = check_patch(patch, project_root, ignored_paths)
+            code, message = check_patch(patch, project_root, ignored_paths, to_create)
             attempt = new_attempt(
                 number, patch.summary, attempt_files(patch, project_root), (code, message)
             )
@@ -552,8 +690,9 @@ def run_attempts(query, k, project_root, ignored_paths, search, generate, report
                     report("patched", os.path.join(project_root, path), 0)
                 return loop_result(True, attempts, False, touched, patch.summary)
 
+            lost = changed_lines(project_root, snapshot, changes)
             restore_snapshot(snapshot)
-            feedback = build_feedback(patch, output)
+            feedback = build_feedback(patch, output, lost)
 
         written = any(attempt["applied"] for attempt in attempts)
         restored = [

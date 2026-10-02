@@ -74,7 +74,7 @@ export function ChatPanel({
       style={{ width: open ? width : 0 }}
       inert={!open}
     >
-      <div className="absolute inset-y-0 right-0 flex min-h-0 flex-col border-l border-border bg-editor-bg" style={{ width }}>
+      <div role="complementary" aria-label="Chat" className="absolute inset-y-0 right-0 flex min-h-0 flex-col border-l border-border bg-editor-bg" style={{ width }}>
         <div
           className="absolute inset-y-0 left-0 z-5 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-px after:w-px after:bg-transparent after:transition-colors after:duration-120 hover:after:bg-accent"
           onMouseDown={startResize}

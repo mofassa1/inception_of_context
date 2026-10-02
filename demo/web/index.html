@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Taskboard</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Taskboard</h1>
+        <span id="stats">0/0 done</span>
+      </header>
+
+      <form id="new-task">
+        <input name="title" placeholder="What needs doing?" autocomplete="off" />
+        <select name="priority">
+          <option value="low">low</option>
+          <option value="normal" selected>normal</option>
+          <option value="high">high</option>
+        </select>
+        <button>Add</button>
+      </form>
+
+      <input id="search" placeholder="Search tasks" />
+      <ul id="tasks"></ul>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
